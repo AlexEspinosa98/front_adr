@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import type { Session } from "next-auth";
 import { getSession, signIn } from "next-auth/react";
 import { FiLock, FiMail } from "react-icons/fi";
 
@@ -33,7 +34,9 @@ export default function LoginPage() {
       return payload;
     },
     onSuccess: async () => {
-      const session = await getSession();
+      const session = (await getSession()) as (Session & {
+        accessToken?: string;
+      }) | null;
       const accessToken = session?.accessToken;
 
       if (accessToken) {
@@ -41,7 +44,7 @@ export default function LoginPage() {
       }
 
       setErrorMessage(null);
-      router.push("/home");
+      router.push("/dashboard");
     },
     onError: () => {
       setErrorMessage("Credenciales inválidas.");
