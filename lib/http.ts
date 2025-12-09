@@ -1,8 +1,8 @@
 import axios from "axios";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "https://adr.ricardopupo.co/api/v1";
+// Use the local proxy to avoid CORS issues
+// The proxy will forward requests to the actual backend
+const API_BASE_URL = "/api/proxy";
 
 export const httpClient = axios.create({
   baseURL: API_BASE_URL,
