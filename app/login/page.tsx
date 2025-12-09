@@ -1,0 +1,120 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { getSession, signIn } from "next-auth/react";
+import { FiLock, FiMail } from "react-icons/fi";
+
+interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+const INPUT_STYLES =
+  "w-full rounded-md border border-zinc-200 px-4 py-3 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loginMutation = useMutation({
+    mutationFn: async (payload: LoginPayload) => {
+      const signInResponse = await signIn("credentials", {
+        email: payload.email,
+        password: payload.password,
+        redirect: false,
+      });
+
+      if (signInResponse?.error || signInResponse?.ok === false) {
+        throw new Error(signInResponse?.error ?? "Credenciales inválidas.");
+      }
+
+      return payload;
+    },
+    onSuccess: async () => {
+      const session = await getSession();
+      const accessToken = session?.accessToken;
+
+      if (accessToken) {
+        window.localStorage.setItem("access_token", accessToken);
+      }
+
+      setErrorMessage(null);
+      router.push("/home");
+    },
+    onError: () => {
+      setErrorMessage("Credenciales inválidas.");
+    },
+  });
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+
+    loginMutation.mutate({ email, password });
+  };
+
+  return (
+    <section className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
+        <div className="mb-8 flex flex-col items-center gap-2 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-700">
+            <FiLock aria-hidden size={22} />
+          </span>
+          <div>
+            <h1 className="text-xl font-semibold text-zinc-900">
+              Panel Administrativo
+            </h1>
+            <p className="text-sm text-zinc-500">
+              Ingresa tus credenciales para continuar.
+            </p>
+          </div>
+        </div>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <label className="block text-sm font-medium text-zinc-700">
+            Email
+            <div className="mt-1 flex items-center gap-2">
+              <FiMail aria-hidden className="text-zinc-400" />
+              <input
+                className={INPUT_STYLES}
+                name="email"
+                placeholder="admin@empresa.com"
+                required
+                type="email"
+              />
+            </div>
+          </label>
+
+          <label className="block text-sm font-medium text-zinc-700">
+            Contraseña
+            <div className="mt-1">
+              <input
+                className={INPUT_STYLES}
+                name="password"
+                placeholder="••••••••"
+                required
+                type="password"
+              />
+            </div>
+          </label>
+
+          {errorMessage ? (
+            <p className="text-sm font-medium text-red-600">{errorMessage}</p>
+          ) : null}
+
+          <button
+            className="mt-4 w-full rounded-md bg-zinc-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+            disabled={loginMutation.isPending}
+            type="submit"
+          >
+            {loginMutation.isPending ? "Validando..." : "Ingresar"}
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+}
