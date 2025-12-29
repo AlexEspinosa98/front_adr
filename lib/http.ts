@@ -1,11 +1,19 @@
 import axios from "axios";
 
-// Use the local proxy to avoid CORS issues
-// The proxy will forward requests to the actual backend
-const API_BASE_URL = "/api/proxy";
+// Use the local proxy in the browser to avoid CORS issues
+// On the server we need an absolute URL or Node will throw ERR_INVALID_URL
+const PROXY_PATH = "/api/proxy";
+const serverBaseUrl =
+  process.env.API_BASE_URL ??
+  (process.env.NEXTAUTH_URL
+    ? `${process.env.NEXTAUTH_URL.replace(/\/$/, "")}${PROXY_PATH}`
+    : undefined) ??
+  `http://localhost:3000${PROXY_PATH}`;
+
+const baseURL = typeof window === "undefined" ? serverBaseUrl : PROXY_PATH;
 
 export const httpClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -17,7 +25,9 @@ httpClient.interceptors.request.use((config) => {
     const token = window.localStorage.getItem("access_token");
     if (token) {
       config.headers = config.headers ?? {};
-      config.headers.Authorization = `Bearer ${token}`;
+      if (!config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
   }
   return config;

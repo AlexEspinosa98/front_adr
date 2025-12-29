@@ -7,5 +7,8 @@ export default withAuth({
 });
 
 export const config = {
-  matcher: ["/home", "/extensionists", "/dashboard"],
+  // Protege todo excepto rutas públicas y recursos estáticos
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|login|auth|.*\\..*).*)",
+  ],
 };

@@ -49,16 +49,16 @@ const sanitizeFormFilters = (filters: FilterFormState): ExtensionistFilters => {
 };
 
 const ExtensionistRow = ({ extensionist }: { extensionist: Extensionist }) => (
-  <li className="flex flex-col gap-1 border-b border-zinc-100 pb-4 pt-4 last:border-b-0 md:flex-row md:items-center md:justify-between">
+  <li className="flex flex-col gap-1 border-b border-emerald-100 pb-4 pt-4 last:border-b-0 md:flex-row md:items-center md:justify-between">
     <div>
-      <p className="text-base font-semibold text-zinc-900">
+      <p className="text-base font-semibold text-emerald-900">
         {extensionist.name}
       </p>
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-emerald-500">
         Doc: {extensionist.identification}
       </p>
     </div>
-    <div className="text-sm text-zinc-600 md:text-right">
+    <div className="text-sm text-emerald-600 md:text-right">
       <p className="font-medium">{extensionist.phone}</p>
     </div>
   </li>
@@ -110,15 +110,15 @@ export const ExtensionistsView = () => {
 
   return (
     <div className="w-full max-w-6xl space-y-6">
-      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-100">
+      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-emerald-100">
         <div className="mb-6 space-y-1">
-          <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">
+          <p className="text-xs uppercase tracking-[0.2em] text-emerald-400">
             Extensionistas
           </p>
-          <h1 className="text-2xl font-semibold text-zinc-900">
+          <h1 className="text-2xl font-semibold text-emerald-900">
             Consulta de extensionistas
           </h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-emerald-500">
             Filtra por nombre, documento, teléfono o ciudad/municipio para
             encontrar fácilmente a un extensionista.
           </p>
@@ -128,10 +128,10 @@ export const ExtensionistsView = () => {
           className="grid grid-cols-1 gap-4 md:grid-cols-2"
           onSubmit={handleSubmit}
         >
-          <label className="text-sm font-medium text-zinc-700">
+          <label className="text-sm font-medium text-emerald-700">
             Nombre
             <input
-              className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+              className="mt-1 w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
               name="name"
               onChange={handleChange}
               placeholder="Nombre"
@@ -139,10 +139,10 @@ export const ExtensionistsView = () => {
             />
           </label>
 
-          <label className="text-sm font-medium text-zinc-700">
+          <label className="text-sm font-medium text-emerald-700">
             Documento
             <input
-              className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+              className="mt-1 w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
               name="identification"
               onChange={handleChange}
               placeholder="Ej. 123456789"
@@ -150,10 +150,10 @@ export const ExtensionistsView = () => {
             />
           </label>
 
-          <label className="text-sm font-medium text-zinc-700">
+          <label className="text-sm font-medium text-emerald-700">
             Teléfono
             <input
-              className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+              className="mt-1 w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
               name="phone"
               onChange={handleChange}
               placeholder="Ej. 3000000000"
@@ -161,10 +161,10 @@ export const ExtensionistsView = () => {
             />
           </label>
 
-          <label className="text-sm font-medium text-zinc-700">
+          <label className="text-sm font-medium text-emerald-700">
             Ciudad
             <input
-              className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+              className="mt-1 w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
               name="city"
               onChange={handleChange}
               placeholder="Ej. Santa Marta"
@@ -174,37 +174,37 @@ export const ExtensionistsView = () => {
 
           <div className="flex flex-col gap-2 pt-2 md:col-span-2 md:flex-row md:items-center md:justify-end">
             <button
-              className="rounded-md border border-transparent bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800"
+              className="rounded-md border border-transparent bg-emerald-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
               type="submit"
             >
               Buscar
             </button>
             <button
-              className="rounded-md border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900"
+              className="rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
               onClick={handleClearFilters}
               type="button"
             >
               Limpiar filtros
             </button>
             {isFetching ? (
-              <span className="text-xs text-zinc-500">Actualizando...</span>
+              <span className="text-xs text-emerald-500">Actualizando...</span>
             ) : null}
           </div>
         </form>
       </section>
 
-      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-100">
-        <div className="flex flex-col gap-2 border-b border-zinc-100 pb-4 md:flex-row md:items-center md:justify-between">
+      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-emerald-100">
+        <div className="flex flex-col gap-2 border-b border-emerald-100 pb-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-semibold text-zinc-900">
+            <p className="text-sm font-semibold text-emerald-900">
               Resultados ({extensionists.length})
             </p>
-            <p className="text-xs text-zinc-500">{activeFiltersDescription}</p>
+            <p className="text-xs text-emerald-500">{activeFiltersDescription}</p>
           </div>
         </div>
 
         {isLoading ? (
-          <p className="py-6 text-sm text-zinc-500">Cargando extensionistas…</p>
+          <p className="py-6 text-sm text-emerald-500">Cargando extensionistas…</p>
         ) : isError ? (
           <div className="py-6 text-sm text-red-600">
             No fue posible obtener los extensionistas. {error?.message}
@@ -219,7 +219,7 @@ export const ExtensionistsView = () => {
             ))}
           </ul>
         ) : (
-          <p className="py-6 text-sm text-zinc-500">
+          <p className="py-6 text-sm text-emerald-500">
             No se encontraron extensionistas con los filtros seleccionados.
           </p>
         )}

@@ -15,7 +15,7 @@ export default async function ExtensionistsPage() {
   }
 
   return (
-    <main className="flex min-h-screen bg-zinc-50 px-4 py-10">
+    <main className="flex min-h-screen bg-emerald-50 px-4 py-10">
       <div className="mx-auto flex w-full justify-center">
         <ExtensionistsView />
       </div>
