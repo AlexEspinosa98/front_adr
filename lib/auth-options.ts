@@ -33,7 +33,9 @@ export const authOptions: NextAuthOptions = {
             password: credentials.password,
           });
 
-          const accessToken = response.data.access_token;
+          const accessToken =
+            response.data.access_token ?? response.data.api_token;
+          const tokenType = response.data.token_type ?? "Token";
 
           if (!accessToken) {
             return null;
@@ -43,6 +45,7 @@ export const authOptions: NextAuthOptions = {
             id: credentials.email,
             email: credentials.email,
             accessToken,
+            tokenType,
           };
         } catch (error) {
           console.error("Error al autenticarse con el backend", error);
@@ -55,12 +58,14 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user?.accessToken) {
         token.accessToken = user.accessToken;
+        token.tokenType = user.tokenType ?? "Token";
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.accessToken) {
         session.accessToken = token.accessToken as string;
+        session.tokenType = (token.tokenType as string | undefined) ?? "Token";
       }
       return session;
     },

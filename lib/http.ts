@@ -23,10 +23,12 @@ export const httpClient = axios.create({
 httpClient.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = window.localStorage.getItem("access_token");
+    const tokenType = window.localStorage.getItem("access_token_type");
     if (token) {
       config.headers = config.headers ?? {};
       if (!config.headers.Authorization) {
-        config.headers.Authorization = `Bearer ${token}`;
+        const headerPrefix = tokenType ?? "Token";
+        config.headers.Authorization = `${headerPrefix} ${token}`;
       }
     }
   }

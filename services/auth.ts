@@ -7,8 +7,9 @@ export interface LoginPayload {
 
 export interface LoginResponse {
   data: {
-    access_token: string;
-    token_type: string;
+    access_token?: string;
+    api_token?: string;
+    token_type?: string;
   };
   message: string;
   success: boolean;

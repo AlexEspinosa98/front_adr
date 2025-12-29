@@ -36,11 +36,14 @@ export default function LoginPage() {
     onSuccess: async () => {
       const session = (await getSession()) as (Session & {
         accessToken?: string;
+        tokenType?: string;
       }) | null;
       const accessToken = session?.accessToken;
+      const tokenType = session?.tokenType ?? "Token";
 
       if (accessToken) {
         window.localStorage.setItem("access_token", accessToken);
+        window.localStorage.setItem("access_token_type", tokenType);
       }
 
       setErrorMessage(null);
