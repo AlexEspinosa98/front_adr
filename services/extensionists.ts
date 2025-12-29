@@ -3,9 +3,15 @@ import { httpClient } from "@/lib/http";
 export interface Extensionist {
   id: number;
   name: string;
+  email?: string;
   identification: string;
   phone: string;
   city?: string;
+  zone?: string;
+  signing_image_path?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ExtensionistsResponse {
@@ -17,6 +23,7 @@ export interface ExtensionistsResponse {
 
 export interface ExtensionistFilters {
   name?: string;
+  email?: string;
   identification?: string;
   phone?: string;
   city?: string;
@@ -43,14 +50,39 @@ export const fetchExtensionists = async (
   const params = sanitizeFilters(filters);
   const { data } = await httpClient.get<ExtensionistsResponse>(
     "/admin/extensionists/names-ids-phones",
-    {
-      params,
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : undefined,
-    },
+    token
+      ? {
+          params,
+          headers: {
+            Authorization: `Token ${token}`,
+          },
+        }
+      : { params },
   );
   return data;
+};
+
+export const fetchExtensionistsFull = async (
+  filters: Pick<ExtensionistFilters, "name" | "email"> = {},
+  token?: string,
+  tokenType: string = "Token",
+) => {
+  const params = sanitizeFilters(filters);
+  const { data } = await httpClient.get<{
+    success: boolean;
+    data: { extensionists: Extensionist[] };
+  }>("/admin/extensionists", {
+    params,
+    headers:
+      token && tokenType
+        ? {
+            Authorization: `${tokenType} ${token}`,
+          }
+        : undefined,
+  });
+
+  return {
+    success: data.success,
+    data: data.data.extensionists,
+  };
 };
