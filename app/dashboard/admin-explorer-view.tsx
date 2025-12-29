@@ -38,6 +38,9 @@ import {
   fetchSurveyDetail,
 } from "@/services/properties";
 import { fetchSurveyStatistics } from "@/services/statistics";
+import { ExtensionistChart } from "./charts/ExtensionistChart";
+import { CityChart } from "./charts/CityChart";
+import { ProductiveLineChart } from "./charts/ProductiveLineChart";
 
 type SessionWithToken = Session & { accessToken?: string };
 
@@ -76,6 +79,7 @@ export const AdminExplorerView = () => {
   const [selectedSurvey, setSelectedSurvey] = useState<PropertySurvey | null>(
     null,
   );
+  const [activeView, setActiveView] = useState<"stats" | "visits">("stats");
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const { data: statsResponse, isLoading: statsLoading, isError: statsError } =
     useQuery({
@@ -263,13 +267,6 @@ export const AdminExplorerView = () => {
     setSelectedSurvey(survey);
   };
 
-  const scrollToSection = (sectionId: string) => {
-    const target = document.getElementById(sectionId);
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
   const renderListState = useCallback(
     ({
       isLoading,
@@ -365,27 +362,35 @@ export const AdminExplorerView = () => {
         </div>
         <nav className="space-y-2">
           <button
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50"
-            onClick={() => scrollToSection("estadistica")}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
+              activeView === "stats"
+                ? "bg-emerald-900 text-white"
+                : "text-emerald-900 hover:bg-emerald-50"
+            }`}
+            onClick={() => setActiveView("stats")}
             type="button"
           >
-            <FiBarChart2 className="text-emerald-500" aria-hidden />
+            <FiBarChart2
+              className={activeView === "stats" ? "text-white" : "text-emerald-500"}
+              aria-hidden
+            />
             Estadística
           </button>
           <button
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50"
-            onClick={() => scrollToSection("extensionistas")}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
+              activeView === "visits"
+                ? "bg-emerald-900 text-white"
+                : "text-emerald-900 hover:bg-emerald-50"
+            }`}
+            onClick={() => setActiveView("visits")}
             type="button"
           >
-            <FiPieChart className="text-emerald-500" aria-hidden />
-            Análisis
-          </button>
-          <button
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50"
-            onClick={() => scrollToSection("revision-visitas")}
-            type="button"
-          >
-            <FiActivity className="text-emerald-500" aria-hidden />
+            <FiActivity
+              className={
+                activeView === "visits" ? "text-white" : "text-emerald-500"
+              }
+              aria-hidden
+            />
             Revisión de visitas
           </button>
         </nav>
@@ -400,12 +405,14 @@ export const AdminExplorerView = () => {
                   Flujo administrativo
                 </p>
                 <h1 className="mt-4 text-3xl font-semibold">
-                  Explora encuestas por extensionista, finca y PDF oficial
+                  {activeView === "stats"
+                    ? "Resumen estadístico de encuestas"
+                    : "Revisión de visitas y encuestas"}
                 </h1>
                 <p className="mt-3 text-base text-emerald-200">
-                  Filtra extensionistas por ciudad, consulta las fincas que
-                  atienden, audita las encuestas realizadas y descarga el PDF
-                  validado por el backend en un solo lugar.
+                  {activeView === "stats"
+                    ? "Explora totales, cobertura y top extensionistas."
+                    : "Filtra extensionistas, revisa fincas, encuestas y descargas."}
                 </p>
               </div>
               <button
@@ -419,120 +426,100 @@ export const AdminExplorerView = () => {
             </div>
           </header>
 
-          <section
-            className={`${SECTION_CLASS} bg-gradient-to-b from-white to-emerald-50/50`}
-            id="estadistica"
-          >
-            <SectionHeader
-              icon={<FiBarChart2 aria-hidden />}
-              title="Resumen estadístico"
-              description="Visión rápida de las encuestas y su cobertura."
-            />
+          {activeView === "stats" ? (
+            <section
+              className={`${SECTION_CLASS} bg-gradient-to-b from-white to-emerald-50/50`}
+            >
+              <SectionHeader
+                icon={<FiBarChart2 aria-hidden />}
+                title="Resumen estadístico"
+                description="Visión rápida de las encuestas y su cobertura."
+              />
 
-            {statsLoading ? (
-              <p className="text-sm text-emerald-500">Cargando estadísticas…</p>
-            ) : statsError ? (
-              <p className="text-sm text-red-600">
-                No fue posible obtener las estadísticas. Verifica tu sesión.
-              </p>
-            ) : surveyStats ? (
-              <>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {statCards.map((card) => (
-                    <StatCard key={card.label} {...card} />
-                  ))}
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-emerald-900">
-                      Top extensionistas
-                    </p>
-                    <p className="text-xs text-emerald-500">
-                      Más encuestas realizadas
-                    </p>
-                    <ul className="mt-3 space-y-2">
-                      {topExtensionists.map((item) => (
-                        <li
-                          className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-                          key={item.id}
-                        >
-                          <span>{item.name}</span>
-                          <span className="font-semibold">{item.count}</span>
-                        </li>
-                      ))}
-                      {topExtensionists.length === 0 ? (
-                        <li className="text-sm text-emerald-500">
-                          Sin registros de extensionistas.
-                        </li>
-                      ) : null}
-                    </ul>
+              {statsLoading ? (
+                <p className="text-sm text-emerald-500">Cargando estadísticas…</p>
+              ) : statsError ? (
+                <p className="text-sm text-red-600">
+                  No fue posible obtener las estadísticas. Verifica tu sesión.
+                </p>
+              ) : surveyStats ? (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {statCards.map((card) => (
+                      <StatCard key={card.label} {...card} />
+                    ))}
                   </div>
 
-                  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-emerald-900">
-                      Ciudades con más encuestas
-                    </p>
-                    <p className="text-xs text-emerald-500">
-                      Top 5 por volumen de registros
-                    </p>
-                    <ul className="mt-3 space-y-2">
-                      {topCities.map((city) => (
-                        <li
-                          className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-                          key={city.value}
-                        >
-                          <span>{city.value}</span>
-                          <span className="font-semibold">{city.count}</span>
-                        </li>
-                      ))}
-                      {topCities.length === 0 ? (
-                        <li className="text-sm text-emerald-500">
-                          Sin registros de ciudades.
-                        </li>
-                      ) : null}
-                    </ul>
-                  </div>
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Top extensionistas
+                      </p>
+                      <p className="text-xs text-emerald-500">
+                        Más encuestas realizadas
+                      </p>
+                      <div className="mt-3">
+                        {topExtensionists.length > 0 ? (
+                          <ExtensionistChart data={topExtensionists} />
+                        ) : (
+                          <p className="text-sm text-emerald-500">
+                            Sin registros de extensionistas.
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
-                  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-emerald-900">
-                      Líneas productivas principales
-                    </p>
-                    <p className="text-xs text-emerald-500">
-                      Declaradas como actividad primaria
-                    </p>
-                    <ul className="mt-3 space-y-2">
-                      {topPrimaryLines.map((line) => (
-                        <li
-                          className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-                          key={line.value}
-                        >
-                          <span>{line.value}</span>
-                          <span className="font-semibold">{line.count}</span>
-                        </li>
-                      ))}
-                      {topPrimaryLines.length === 0 ? (
-                        <li className="text-sm text-emerald-500">
-                          Sin registros de líneas productivas.
-                        </li>
-                      ) : null}
-                    </ul>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-emerald-500">
-                No hay datos estadísticos disponibles.
-              </p>
-            )}
-          </section>
+                    <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Ciudades con más encuestas
+                      </p>
+                      <p className="text-xs text-emerald-500">
+                        Top 5 por volumen de registros
+                      </p>
+                      <div className="mt-3">
+                        {topCities.length > 0 ? (
+                           <CityChart data={topCities} />
+                        ) : (
+                          <p className="text-sm text-emerald-500">
+                            Sin registros de ciudades.
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
-          <section className={SECTION_CLASS} id="extensionistas">
-            <SectionHeader
-              icon={<FiMapPin aria-hidden />}
-              title="1. Filtra extensionistas por ciudad"
-              description="Aplica el filtro de ciudad para obtener el listado inicial."
-            />
+                    <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Líneas productivas principales
+                      </p>
+                      <p className="text-xs text-emerald-500">
+                        Declaradas como actividad primaria
+                      </p>
+                      <div className="mt-3">
+                        {topPrimaryLines.length > 0 ? (
+                          <ProductiveLineChart data={topPrimaryLines} />
+                        ) : (
+                          <p className="text-sm text-emerald-500">
+                            Sin registros de líneas productivas.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-emerald-500">
+                  No hay datos estadísticos disponibles.
+                </p>
+              )}
+            </section>
+          ) : (
+            <>
+              <section className={SECTION_CLASS}>
+                <SectionHeader
+                  icon={<FiMapPin aria-hidden />}
+                  title="1. Filtra extensionistas por ciudad"
+                  description="Aplica el filtro de ciudad para obtener el listado inicial."
+                />
 
             <form
               className="flex flex-col gap-3 md:flex-row"
@@ -694,12 +681,12 @@ export const AdminExplorerView = () => {
             )}
           </section>
 
-          <section className={SECTION_CLASS} id="revision-visitas">
-            <SectionHeader
-              icon={<FiUsers aria-hidden />}
-              title="3. Audita encuestas por finca"
-              description="Consulta el listado de encuestas y el enlace al PDF generado."
-            />
+              <section className={SECTION_CLASS}>
+                <SectionHeader
+                  icon={<FiUsers aria-hidden />}
+                  title="3. Audita encuestas por finca"
+                  description="Consulta el listado de encuestas y el enlace al PDF generado."
+                />
 
             {!selectedProperty ? (
               <p className="text-sm text-emerald-500">
@@ -776,12 +763,12 @@ export const AdminExplorerView = () => {
             )}
           </section>
 
-          <section className={SECTION_CLASS}>
-            <SectionHeader
-              icon={<FiCheckCircle aria-hidden />}
-              title="4. Consulta el detalle y descarga el PDF oficial"
-              description="Visualiza el contenido de la encuesta y fuerza la descarga del PDF emitido."
-            />
+              <section className={SECTION_CLASS}>
+                <SectionHeader
+                  icon={<FiCheckCircle aria-hidden />}
+                  title="4. Consulta el detalle y descarga el PDF oficial"
+                  description="Visualiza el contenido de la encuesta y fuerza la descarga del PDF emitido."
+                />
 
             {!selectedSurvey ? (
               <p className="text-sm text-emerald-500">
@@ -901,6 +888,8 @@ export const AdminExplorerView = () => {
               })
             )}
           </section>
+            </>
+          )}
         </div>
       </main>
     </div>
