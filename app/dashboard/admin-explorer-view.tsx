@@ -27,6 +27,13 @@ import {
   ExtensionistFilters,
   fetchExtensionistsFull,
 } from "@/services/extensionists";
+import {
+  ExtensionistProperty,
+  fetchExtensionistProperties,
+  PropertySurvey,
+  fetchPropertySurveys,
+  fetchSurveyDetail,
+} from "@/services/properties";
 import { fetchSurveyStatistics } from "@/services/statistics";
 import { ExtensionistChart } from "./charts/ExtensionistChart";
 import { CityChart } from "./charts/CityChart";
@@ -68,8 +75,18 @@ export const AdminExplorerView = () => {
   >({});
   const [selectedExtensionist, setSelectedExtensionist] =
     useState<Extensionist | null>(null);
+  const [selectedProperty, setSelectedProperty] =
+    useState<ExtensionistProperty | null>(null);
+  const [selectedSurvey, setSelectedSurvey] = useState<PropertySurvey | null>(
+    null,
+  );
   const [activeView, setActiveView] = useState<"stats" | "visits">("stats");
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
+    null,
+  );
+  const [propertySearch, setPropertySearch] = useState("");
+  const [propertyPage, setPropertyPage] = useState(1);
   const { data: statsResponse, isLoading: statsLoading, isError: statsError } =
     useQuery({
       queryKey: ["survey-statistics", accessToken],
@@ -84,7 +101,12 @@ export const AdminExplorerView = () => {
       email: emailInput.trim() || undefined,
     });
     setSelectedExtensionist(null);
+    setSelectedProperty(null);
+    setSelectedSurvey(null);
     setCurrentPage(1);
+    setExpandedPropertyId(null);
+    setPropertySearch("");
+    setPropertyPage(1);
   };
 
   const {
@@ -113,6 +135,84 @@ export const AdminExplorerView = () => {
     const clamped = Math.max(1, Math.min(page, totalPages));
     setCurrentPage(clamped);
   };
+
+  const {
+    data: propertiesResponse,
+    isLoading: propertiesLoading,
+    isError: propertiesError,
+    error: propertiesFetchError,
+    isFetching: propertiesFetching,
+  } = useQuery({
+    queryKey: [
+      "extensionist-properties-full",
+      selectedExtensionist?.id,
+      accessToken,
+      tokenType,
+    ],
+    queryFn: () =>
+      fetchExtensionistProperties(selectedExtensionist!.id, accessToken, tokenType),
+    enabled: Boolean(selectedExtensionist && accessToken),
+  });
+
+  const properties = propertiesResponse?.data ?? [];
+  const filteredProperties = properties.filter((property) =>
+    property.name.toLowerCase().includes(propertySearch.toLowerCase().trim()),
+  );
+  const propertiesPageSize = 5;
+  const propertiesTotalPages = Math.max(
+    1,
+    Math.ceil(filteredProperties.length / propertiesPageSize),
+  );
+  const currentPropertyPageSafe = Math.min(propertyPage, propertiesTotalPages);
+  const paginatedProperties = filteredProperties.slice(
+    (currentPropertyPageSafe - 1) * propertiesPageSize,
+    currentPropertyPageSafe * propertiesPageSize,
+  );
+
+  const {
+    data: surveysResponse,
+    isLoading: surveysLoading,
+    isError: surveysError,
+    error: surveysFetchError,
+    isFetching: surveysFetching,
+  } = useQuery({
+    queryKey: [
+      "property-surveys-full",
+      selectedProperty?.id,
+      accessToken,
+      tokenType,
+    ],
+    queryFn: () =>
+      fetchPropertySurveys(selectedProperty!.id, accessToken, tokenType),
+    enabled: Boolean(selectedProperty && accessToken),
+  });
+
+  const surveys = surveysResponse?.data ?? [];
+
+  const {
+    data: surveyDetailResponse,
+    isLoading: surveyDetailLoading,
+    isError: surveyDetailError,
+    error: surveyDetailFetchError,
+  } = useQuery({
+    queryKey: [
+      "survey-detail-full",
+      selectedSurvey?.surveyTypeId,
+      selectedSurvey?.id,
+      accessToken,
+      tokenType,
+    ],
+    queryFn: () =>
+      fetchSurveyDetail(
+        selectedSurvey!.surveyTypeId,
+        selectedSurvey!.id,
+        accessToken,
+        tokenType,
+      ),
+    enabled: Boolean(selectedSurvey && accessToken),
+  });
+
+  const surveyDetail = surveyDetailResponse?.data;
 
   const surveyStats = statsResponse?.data;
   const statCards = [
@@ -160,6 +260,11 @@ export const AdminExplorerView = () => {
 
   const handleExtensionistSelect = (extensionist: Extensionist) => {
     setSelectedExtensionist(extensionist);
+    setExpandedPropertyId(null);
+    setSelectedProperty(null);
+    setSelectedSurvey(null);
+    setPropertySearch("");
+    setPropertyPage(1);
   };
 
   const renderListState = useCallback(
@@ -425,6 +530,8 @@ export const AdminExplorerView = () => {
                         setEmailInput("");
                         setAppliedFilters({});
                         setSelectedExtensionist(null);
+                        setSelectedProperty(null);
+                        setSelectedSurvey(null);
                         setCurrentPage(1);
                         refetchExtensionists();
                       }}
@@ -548,8 +655,315 @@ export const AdminExplorerView = () => {
                       "Usa los filtros para encontrar extensionistas registrados.",
                   })
                 )}
-          </section>
+              </section>
 
+              <section className={SECTION_CLASS}>
+                <SectionHeader
+                  icon={<FiHome aria-hidden />}
+                  title="Propiedades del extensionista"
+                  description="Selecciona un extensionista y explora sus predios registrados."
+                />
+
+                {!selectedExtensionist ? (
+                  <p className="text-sm text-emerald-500">
+                    Selecciona un extensionista para ver sus propiedades.
+                  </p>
+                ) : properties.length > 0 ? (
+                  <>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <input
+                        className="w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 md:max-w-sm"
+                        placeholder="Buscar propiedad por nombre"
+                        value={propertySearch}
+                        onChange={(e) => {
+                          setPropertySearch(e.target.value);
+                          setPropertyPage(1);
+                        }}
+                      />
+                      <div className="flex items-center gap-2 text-xs text-emerald-600">
+                        <span>
+                          Propiedades:{" "}
+                          <strong className="text-emerald-900">
+                            {filteredProperties.length}
+                          </strong>
+                        </span>
+                        <span className="hidden md:inline-block">·</span>
+                        <span>
+                          Página {currentPropertyPageSafe} de {propertiesTotalPages}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {paginatedProperties.map((property) => {
+                      const isExpanded = expandedPropertyId === property.id;
+                      return (
+                        <div
+                          className="rounded-xl border border-emerald-100 bg-white shadow-sm"
+                          key={property.id}
+                        >
+                          <button
+                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                            onClick={() =>
+                              setExpandedPropertyId(
+                                isExpanded ? null : property.id,
+                              )
+                            }
+                            type="button"
+                          >
+                            <div>
+                              <p className="text-base font-semibold text-emerald-900">
+                                {property.name}
+                              </p>
+                              <p className="text-sm text-emerald-500">
+                                {property.city ?? property.municipality ?? "Ciudad N/D"} ·{" "}
+                                {property.state ?? "Estado N/D"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProperty(property);
+                                  setSelectedSurvey(null);
+                                  setExpandedPropertyId(property.id);
+                                }}
+                              >
+                                Encuestas
+                              </button>
+                            <span
+                              className={`rounded-full border border-emerald-200 p-2 text-emerald-600 transition ${
+                                isExpanded ? "bg-emerald-50 rotate-90" : ""
+                              }`}
+                            >
+                              <FiChevronRight aria-hidden />
+                            </span>
+                            </div>
+                          </button>
+
+                          {isExpanded ? (
+                            <div className="grid gap-3 border-t border-emerald-100 px-4 py-3 md:grid-cols-3">
+                              <div className="rounded-lg bg-emerald-50 p-3">
+                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  Línea primaria
+                                </p>
+                                <p className="text-sm font-semibold text-emerald-900">
+                                  {property.primaryLine ?? "N/D"}
+                                </p>
+                                {property.secondaryLine ? (
+                                  <p className="text-xs text-emerald-500">
+                                    Secundaria: {property.secondaryLine}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="rounded-lg bg-emerald-50 p-3">
+                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  Vereda
+                                </p>
+                                <p className="text-sm font-semibold text-emerald-900">
+                                  {property.village ?? "N/D"}
+                                </p>
+                              </div>
+                              <div className="rounded-lg bg-emerald-50 p-3">
+                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  Área en producción
+                                </p>
+                                <p className="text-sm font-semibold text-emerald-900">
+                                  {property.areaInProduction ?? "N/D"} ha
+                                </p>
+                              </div>
+                              <div className="rounded-lg bg-emerald-50 p-3">
+                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  Coordenadas
+                                </p>
+                                <p className="text-sm font-semibold text-emerald-900">
+                                  {(property as any).latitude ?? "N/D"},{" "}
+                                  {(property as any).longitude ?? "N/D"}
+                                </p>
+                              </div>
+                              <div className="rounded-lg bg-emerald-50 p-3">
+                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  Creado
+                                </p>
+                                <p className="text-sm font-semibold text-emerald-900">
+                                  {property.createdAt
+                                    ? new Date(property.createdAt).toLocaleDateString()
+                                    : "N/D"}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  className="inline-flex items-center gap-2 rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedProperty(property);
+                                    setSelectedSurvey(null);
+                                  }}
+                                >
+                                  Ver encuestas
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                    <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <span className="text-xs text-emerald-600">
+                        Mostrando {paginatedProperties.length} de {filteredProperties.length} propiedades
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={currentPropertyPageSafe === 1}
+                          onClick={() =>
+                            setPropertyPage((prev) => Math.max(1, prev - 1))
+                          }
+                        >
+                          <FiChevronLeft aria-hidden />
+                          Anterior
+                        </button>
+                        <span className="text-xs text-emerald-600">
+                          Página {currentPropertyPageSafe} de {propertiesTotalPages}
+                        </span>
+                        <button
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={currentPropertyPageSafe === propertiesTotalPages}
+                          onClick={() =>
+                            setPropertyPage((prev) =>
+                              Math.min(propertiesTotalPages, prev + 1),
+                            )
+                          }
+                        >
+                          Siguiente
+                          <FiChevronRight aria-hidden />
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  renderListState({
+                    isLoading: propertiesLoading,
+                    isFetching: propertiesFetching,
+                    isError: propertiesError,
+                    errorMessage: propertiesFetchError?.message,
+                    emptyLabel:
+                      "Selecciona un extensionista para mostrar sus propiedades.",
+                  })
+                )}
+              </section>
+
+              <section className={SECTION_CLASS}>
+                <SectionHeader
+                  icon={<FiUsers aria-hidden />}
+                  title="Encuestas de la propiedad"
+                  description="Selecciona una propiedad y navega entre las encuestas disponibles (1, 2 y 3)."
+                />
+
+                {!selectedProperty ? (
+                  <p className="text-sm text-emerald-500">
+                    Selecciona una propiedad para ver sus encuestas.
+                  </p>
+                ) : surveys.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      {[0, 1, 2].map((index) => {
+                        const survey = surveys[index];
+                        const isActive =
+                          survey && survey.id === selectedSurvey?.id;
+                        return (
+                          <button
+                            key={survey ? survey.id : `placeholder-${index}`}
+                            className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                              survey && isActive
+                                ? "border-emerald-900 bg-emerald-900 text-white"
+                                : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
+                            }`}
+                            disabled={!survey}
+                            onClick={() => survey && setSelectedSurvey(survey)}
+                            type="button"
+                          >
+                            Encuesta {index + 1}
+                            <span className="text-xs font-normal">
+                              {survey ? survey.surveyType : "No disponible"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selectedSurvey ? (
+                      surveyDetail ? (
+                        <div className="grid gap-3 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm md:grid-cols-2">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                              Tipo de encuesta
+                            </p>
+                            <p className="text-base font-semibold text-emerald-900">
+                              {selectedSurvey.surveyType}
+                            </p>
+                            <p className="text-sm text-emerald-500">
+                              Estado: {selectedSurvey.status ?? "Sin estado"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                              Recomendaciones
+                            </p>
+                            <p className="text-sm text-emerald-700 whitespace-pre-line">
+                              {(surveyDetail.recommendations as string) ?? "N/D"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                              Productor
+                            </p>
+                            <p className="text-sm font-semibold text-emerald-900">
+                              {(surveyDetail.producer as { name?: string })?.name ??
+                                "N/D"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                              Propiedad
+                            </p>
+                            <p className="text-sm font-semibold text-emerald-900">
+                              {(surveyDetail.property as { name?: string })?.name ??
+                                selectedProperty.name}
+                            </p>
+                          </div>
+                        </div>
+                      ) : surveyDetailLoading ? (
+                        <p className="text-sm text-emerald-500">
+                          Cargando detalle de la encuesta…
+                        </p>
+                      ) : surveyDetailError ? (
+                        <p className="text-sm text-red-600">
+                          No fue posible obtener el detalle:{" "}
+                          {surveyDetailFetchError?.message ?? "Error desconocido."}
+                        </p>
+                      ) : null
+                    ) : (
+                      <p className="text-sm text-emerald-500">
+                        Elige una encuesta para ver su detalle.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  renderListState({
+                    isLoading: surveysLoading,
+                    isFetching: surveysFetching,
+                    isError: surveysError,
+                    errorMessage: surveysFetchError?.message,
+                    emptyLabel:
+                      "La propiedad seleccionada no tiene encuestas registradas.",
+                  })
+                )}
+              </section>
             </>
           )}
         </div>

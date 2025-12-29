@@ -1,9 +1,9 @@
 import { httpClient } from "@/lib/http";
 
-const authHeaders = (token?: string) =>
+const authHeaders = (token?: string, tokenType: string = "Token") =>
   token
     ? {
-        Authorization: `Bearer ${token}`,
+        Authorization: `${tokenType} ${token}`,
       }
     : undefined;
 
@@ -34,9 +34,10 @@ type RawPropertySurvey = {
 };
 
 interface ExtensionistPropertiesApiResponse {
-  data: RawExtensionistProperty[];
-  message: string;
+  data: RawExtensionistProperty[] | { properties?: RawExtensionistProperty[] };
+  message?: string;
   status?: string;
+  success?: boolean;
 }
 
 interface PropertySurveysApiResponse {
@@ -52,6 +53,14 @@ export interface ExtensionistProperty {
   municipality?: string;
   address?: string;
   product?: string;
+  state?: string;
+  village?: string;
+  primaryLine?: string;
+  secondaryLine?: string;
+  areaInProduction?: string;
+  latitude?: string;
+  longitude?: string;
+  createdAt?: string;
 }
 
 export interface ExtensionistPropertiesResponse {
@@ -96,17 +105,25 @@ export interface SurveyDetailResponse {
 export const fetchExtensionistProperties = async (
   extensionistId: number,
   token?: string,
+  tokenType: string = "Token",
 ): Promise<ExtensionistPropertiesResponse> => {
   const { data } = await httpClient.get<ExtensionistPropertiesApiResponse>(
     `/admin/extensionists/${extensionistId}/product-properties`,
     {
-      headers: authHeaders(token),
+      headers: authHeaders(token, tokenType),
     },
   );
 
+  const rawList = Array.isArray(data.data)
+    ? data.data
+    : Array.isArray((data.data as { properties?: RawExtensionistProperty[] })?.properties)
+      ? ((data.data as { properties?: RawExtensionistProperty[] }).properties as RawExtensionistProperty[])
+      : [];
+
   return {
-    ...data,
-    data: data.data.map((property) => ({
+    message: data.message ?? "",
+    status: data.status,
+    data: rawList.map((property) => ({
       id: property.id ?? property.property_id ?? 0,
       name:
         property.name ??
@@ -116,6 +133,14 @@ export const fetchExtensionistProperties = async (
       municipality: property.municipality ?? property.city,
       address: property.address,
       product: property.product,
+      state: (property as any).state,
+      village: (property as any).village,
+      primaryLine: (property as any).linea_productive_primary,
+      secondaryLine: (property as any).linea_productive_secondary,
+      areaInProduction: (property as any).area_in_production,
+      latitude: (property as any).latitude,
+      longitude: (property as any).longitude,
+      createdAt: (property as any).created_at,
     })),
   };
 };
@@ -123,11 +148,12 @@ export const fetchExtensionistProperties = async (
 export const fetchPropertySurveys = async (
   propertyId: number,
   token?: string,
+  tokenType: string = "Token",
 ): Promise<PropertySurveysResponse> => {
   const { data } = await httpClient.get<PropertySurveysApiResponse>(
     `/admin/properties/${propertyId}/surveys`,
     {
-      headers: authHeaders(token),
+      headers: authHeaders(token, tokenType),
     },
   );
 
@@ -153,11 +179,12 @@ export const fetchSurveyDetail = async (
   surveyTypeId: number,
   surveyId: number,
   token?: string,
+  tokenType: string = "Token",
 ): Promise<SurveyDetailResponse> => {
   const { data } = await httpClient.get<SurveyDetailResponse>(
     `/admin/surveys/${surveyTypeId}/${surveyId}`,
     {
-      headers: authHeaders(token),
+      headers: authHeaders(token, tokenType),
     },
   );
   return data;
