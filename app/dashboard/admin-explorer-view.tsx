@@ -502,9 +502,9 @@ export const AdminExplorerView = () => {
     { label: "Panorama", url: visitDetail?.photo_panorama },
     { label: "Foto adicional", url: visitDetail?.phono_extra_1 },
     ] as const
-  ).filter(
-    (photo): photo is { label: string; url: string } => Boolean(photo.url),
-  );
+  )
+    .filter((photo) => Boolean(photo.url))
+    .map((photo) => ({ label: photo.label as string, url: photo.url as string }));
 
   useEffect(() => {
     if (visitDetail) {
@@ -523,11 +523,15 @@ export const AdminExplorerView = () => {
   }, [visitDetail]);
 
   useEffect(() => {
-    setEditableProducer((visitProducer as Record<string, unknown>) ?? null);
+    setEditableProducer(
+      visitProducer ? (visitProducer as Record<string, unknown>) : null,
+    );
   }, [visitProducer]);
 
   useEffect(() => {
-    setEditableProperty((visitPropertyData as Record<string, unknown>) ?? null);
+    setEditableProperty(
+      visitPropertyData ? (visitPropertyData as unknown as Record<string, unknown>) : null,
+    );
   }, [visitPropertyData]);
 
   const updateVisitField = (key: string, value: string) => {
