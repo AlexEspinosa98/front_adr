@@ -102,6 +102,58 @@ export interface SurveyDetailResponse {
   status?: string;
 }
 
+export interface PropertySurveyVisit {
+  id?: number;
+  extensionist_id?: number;
+  user_producer_id?: number;
+  property_id?: number;
+  extensionist?: Record<string, unknown>;
+  user_producer?: Record<string, unknown>;
+  property?: Record<string, unknown>;
+  classification_user?: {
+    total?: number;
+    detail?: Record<string, number>;
+  };
+  medition_focalization?: Record<
+    string,
+    { score?: number; obervation?: string | null }
+  >;
+  objetive_accompaniment?: string;
+  initial_diagnosis?: string;
+  recommendations_commitments?: string;
+  observations_visited?: string;
+  photo_user?: string;
+  photo_interaction?: string;
+  photo_panorama?: string;
+  phono_extra_1?: string;
+  file_pdf?: string | null;
+  date_acompanamiento?: string;
+  hour_acompanamiento?: string;
+  visit_date?: string;
+  date_hour_end?: string;
+  origen_register?: string;
+  state?: string;
+  state_reason?: string | null;
+  state_updated_by?: string | null;
+  state_updated_at?: string | null;
+  name_acompanamiento?: string;
+  attended_by?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+}
+
+export interface PropertySurveyVisitResponse {
+  success?: boolean;
+  message?: string;
+  data?: {
+    property?: Record<string, unknown>;
+    producer?: Record<string, unknown>;
+    surveys?: PropertySurveyVisit[];
+  };
+}
+
 export const fetchExtensionistProperties = async (
   extensionistId: number,
   token?: string,
@@ -203,4 +255,27 @@ export const downloadSurveyPdf = async (
     },
   );
   return response.data;
+};
+
+export const fetchPropertySurveyVisit = async (
+  propertyId: number,
+  visitNumber: number,
+  token?: string,
+  tokenType: string = "Token",
+): Promise<PropertySurveyVisitResponse> => {
+  const { data } = await httpClient.get<PropertySurveyVisitResponse>(
+    `/admin/properties/${propertyId}/surveys/${visitNumber}`,
+    {
+      headers: authHeaders(token, tokenType),
+    },
+  );
+
+  return {
+    ...data,
+    data: {
+      property: data.data?.property,
+      producer: data.data?.producer,
+      surveys: data.data?.surveys ?? [],
+    },
+  };
 };

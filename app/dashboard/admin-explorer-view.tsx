@@ -20,6 +20,10 @@ import {
   FiHome,
   FiSearch,
   FiUsers,
+  FiCheck,
+  FiX,
+  FiFileText,
+  FiExternalLink,
 } from "react-icons/fi";
 
 import {
@@ -29,10 +33,8 @@ import {
 } from "@/services/extensionists";
 import {
   ExtensionistProperty,
+  fetchPropertySurveyVisit,
   fetchExtensionistProperties,
-  PropertySurvey,
-  fetchPropertySurveys,
-  fetchSurveyDetail,
 } from "@/services/properties";
 import { fetchSurveyStatistics } from "@/services/statistics";
 import { ExtensionistChart } from "./charts/ExtensionistChart";
@@ -64,6 +66,41 @@ const SectionHeader = ({
   </div>
 );
 
+const SectionCard = ({
+  number,
+  title,
+  children,
+}: {
+  number: string;
+  title: string;
+  children: ReactNode;
+}) => (
+  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+    <div className="mb-3 flex items-baseline gap-2">
+      <span className="text-lg font-bold text-emerald-900">{number}</span>
+      <p className="text-sm font-semibold text-emerald-900">{title}</p>
+    </div>
+    <div className="space-y-3">{children}</div>
+  </div>
+);
+
+const FieldItem = ({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | number | null;
+}) => (
+  <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 px-3 py-2">
+    <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+      {label}
+    </p>
+    <p className="text-sm font-semibold text-emerald-900">
+      {value ?? "Sin información"}
+    </p>
+  </div>
+);
+
 export const AdminExplorerView = () => {
   const { data: session } = useSession();
   const accessToken = (session as SessionWithToken | null)?.accessToken;
@@ -77,9 +114,12 @@ export const AdminExplorerView = () => {
     useState<Extensionist | null>(null);
   const [selectedProperty, setSelectedProperty] =
     useState<ExtensionistProperty | null>(null);
-  const [selectedSurvey, setSelectedSurvey] = useState<PropertySurvey | null>(
-    null,
-  );
+  const [selectedVisit, setSelectedVisit] = useState<number | null>(null);
+  const [visitDecision, setVisitDecision] = useState<
+    "accepted" | "rejected" | null
+  >(null);
+  const [showClassificationDetail, setShowClassificationDetail] =
+    useState(false);
   const [activeView, setActiveView] = useState<"stats" | "visits">("stats");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
@@ -102,7 +142,9 @@ export const AdminExplorerView = () => {
     });
     setSelectedExtensionist(null);
     setSelectedProperty(null);
-    setSelectedSurvey(null);
+    setSelectedVisit(null);
+    setVisitDecision(null);
+    setShowClassificationDetail(false);
     setCurrentPage(1);
     setExpandedPropertyId(null);
     setPropertySearch("");
@@ -154,6 +196,31 @@ export const AdminExplorerView = () => {
     enabled: Boolean(selectedExtensionist && accessToken),
   });
 
+  const {
+    data: surveyVisitResponse,
+    isLoading: surveyVisitLoading,
+    isError: surveyVisitError,
+    error: surveyVisitFetchError,
+    isFetching: surveyVisitFetching,
+    refetch: refetchSurveyVisit,
+  } = useQuery({
+    queryKey: [
+      "property-survey-visit",
+      selectedProperty?.id,
+      selectedVisit,
+      accessToken,
+      tokenType,
+    ],
+    queryFn: () =>
+      fetchPropertySurveyVisit(
+        selectedProperty!.id,
+        selectedVisit!,
+        accessToken,
+        tokenType,
+      ),
+    enabled: Boolean(selectedProperty && selectedVisit && accessToken),
+  });
+
   const properties = propertiesResponse?.data ?? [];
   const filteredProperties = properties.filter((property) =>
     property.name.toLowerCase().includes(propertySearch.toLowerCase().trim()),
@@ -168,51 +235,6 @@ export const AdminExplorerView = () => {
     (currentPropertyPageSafe - 1) * propertiesPageSize,
     currentPropertyPageSafe * propertiesPageSize,
   );
-
-  const {
-    data: surveysResponse,
-    isLoading: surveysLoading,
-    isError: surveysError,
-    error: surveysFetchError,
-    isFetching: surveysFetching,
-  } = useQuery({
-    queryKey: [
-      "property-surveys-full",
-      selectedProperty?.id,
-      accessToken,
-      tokenType,
-    ],
-    queryFn: () =>
-      fetchPropertySurveys(selectedProperty!.id, accessToken, tokenType),
-    enabled: Boolean(selectedProperty && accessToken),
-  });
-
-  const surveys = surveysResponse?.data ?? [];
-
-  const {
-    data: surveyDetailResponse,
-    isLoading: surveyDetailLoading,
-    isError: surveyDetailError,
-    error: surveyDetailFetchError,
-  } = useQuery({
-    queryKey: [
-      "survey-detail-full",
-      selectedSurvey?.surveyTypeId,
-      selectedSurvey?.id,
-      accessToken,
-      tokenType,
-    ],
-    queryFn: () =>
-      fetchSurveyDetail(
-        selectedSurvey!.surveyTypeId,
-        selectedSurvey!.id,
-        accessToken,
-        tokenType,
-      ),
-    enabled: Boolean(selectedSurvey && accessToken),
-  });
-
-  const surveyDetail = surveyDetailResponse?.data;
 
   const surveyStats = statsResponse?.data;
   const statCards = [
@@ -262,7 +284,9 @@ export const AdminExplorerView = () => {
     setSelectedExtensionist(extensionist);
     setExpandedPropertyId(null);
     setSelectedProperty(null);
-    setSelectedSurvey(null);
+    setSelectedVisit(null);
+    setVisitDecision(null);
+    setShowClassificationDetail(false);
     setPropertySearch("");
     setPropertyPage(1);
   };
@@ -302,6 +326,19 @@ export const AdminExplorerView = () => {
     [],
   );
 
+  const formatDate = (value?: string | null) => {
+    if (!value) return undefined;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString();
+  };
+
+  const prettifyKey = (key: string) =>
+    key
+      .split("_")
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(" ")
+      .replace("Ict", "ICT");
+
   const StatCard = ({
     label,
     value,
@@ -325,6 +362,34 @@ export const AdminExplorerView = () => {
     </div>
   );
 
+  const surveyVisitData = surveyVisitResponse?.data;
+  const visitDetail = surveyVisitData?.surveys?.[0];
+  const visitPropertyData =
+    (surveyVisitData?.property as ExtensionistProperty | undefined) ??
+    selectedProperty;
+  const visitProducer = surveyVisitData?.producer as
+    | Record<string, unknown>
+    | undefined;
+  const visitExtensionist = visitDetail?.extensionist as
+    | Record<string, unknown>
+    | undefined;
+  const classificationEntries = Object.entries(
+    visitDetail?.classification_user?.detail ?? {},
+  );
+  const classificationTotal = visitDetail?.classification_user?.total;
+  const focalizationEntries = Object.entries(
+    visitDetail?.medition_focalization ?? {},
+  );
+  const photoGallery = (
+    [
+    { label: "Foto del productor", url: visitDetail?.photo_user },
+    { label: "Foto de interacción", url: visitDetail?.photo_interaction },
+    { label: "Panorama", url: visitDetail?.photo_panorama },
+    { label: "Foto adicional", url: visitDetail?.phono_extra_1 },
+    ] as const
+  ).filter(
+    (photo): photo is { label: string; url: string } => Boolean(photo.url),
+  );
   return (
     <div className="flex min-h-screen bg-emerald-50">
       <aside className="hidden w-64 shrink-0 flex-col gap-2 bg-white p-6 shadow-sm ring-1 ring-emerald-100 lg:flex">
@@ -531,7 +596,8 @@ export const AdminExplorerView = () => {
                         setAppliedFilters({});
                         setSelectedExtensionist(null);
                         setSelectedProperty(null);
-                        setSelectedSurvey(null);
+                        setSelectedVisit(null);
+                        setVisitDecision(null);
                         setCurrentPage(1);
                         refetchExtensionists();
                       }}
@@ -722,16 +788,18 @@ export const AdminExplorerView = () => {
                             </div>
                             <div className="flex items-center gap-2">
                               <button
-                                className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
-                                type="button"
-                                onClick={() => {
-                                  setSelectedProperty(property);
-                                  setSelectedSurvey(null);
-                                  setExpandedPropertyId(property.id);
-                                }}
-                              >
-                                Encuestas
-                              </button>
+                              className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                              type="button"
+                              onClick={() => {
+                                setSelectedProperty(property);
+                                setSelectedVisit(1);
+                                setVisitDecision(null);
+                                setShowClassificationDetail(false);
+                                setExpandedPropertyId(property.id);
+                              }}
+                            >
+                              Encuestas
+                            </button>
                             <span
                               className={`rounded-full border border-emerald-200 p-2 text-emerald-600 transition ${
                                 isExpanded ? "bg-emerald-50 rotate-90" : ""
@@ -798,7 +866,9 @@ export const AdminExplorerView = () => {
                                   type="button"
                                   onClick={() => {
                                     setSelectedProperty(property);
-                                    setSelectedSurvey(null);
+                                    setSelectedVisit(1);
+                                    setVisitDecision(null);
+                                    setShowClassificationDetail(false);
                                   }}
                                 >
                                   Ver encuestas
@@ -861,107 +931,480 @@ export const AdminExplorerView = () => {
                 <SectionHeader
                   icon={<FiUsers aria-hidden />}
                   title="Encuestas de la propiedad"
-                  description="Selecciona una propiedad y navega entre las encuestas disponibles (1, 2 y 3)."
+                  description="Selecciona una propiedad para habilitar las visitas."
                 />
 
                 {!selectedProperty ? (
                   <p className="text-sm text-emerald-500">
-                    Selecciona una propiedad para ver sus encuestas.
+                    Selecciona una propiedad para ver las visitas disponibles.
                   </p>
-                ) : surveys.length > 0 ? (
+                ) : (
                   <div className="space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      {[0, 1, 2].map((index) => {
-                        const survey = surveys[index];
-                        const isActive =
-                          survey && survey.id === selectedSurvey?.id;
-                        return (
-                          <button
-                            key={survey ? survey.id : `placeholder-${index}`}
-                            className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${
-                              survey && isActive
-                                ? "border-emerald-900 bg-emerald-900 text-white"
-                                : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
-                            }`}
-                            disabled={!survey}
-                            onClick={() => survey && setSelectedSurvey(survey)}
-                            type="button"
-                          >
-                            Encuesta {index + 1}
-                            <span className="text-xs font-normal">
-                              {survey ? survey.surveyType : "No disponible"}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <div className="flex flex-col gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-500">
+                          Propiedad seleccionada
+                        </p>
+                        <p className="text-lg font-semibold text-emerald-900">
+                          {selectedProperty.name}
+                        </p>
+                        <p className="text-sm text-emerald-600">
+                          {selectedProperty.city ?? selectedProperty.municipality ?? "Ciudad N/D"} ·{" "}
+                          {(selectedProperty as any).state ?? "Estado N/D"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[1, 2, 3].map((num) => {
+                          const isActive = selectedVisit === num;
+                          return (
+                            <button
+                              key={num}
+                              className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                                isActive
+                                  ? "border-emerald-900 bg-emerald-900 text-white"
+                                  : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
+                              }`}
+                              type="button"
+                              onClick={() => {
+                                setSelectedVisit(num);
+                                setVisitDecision(null);
+                                setShowClassificationDetail(false);
+                              }}
+                            >
+                              Visita {num}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    {selectedSurvey ? (
-                      surveyDetail ? (
-                        <div className="grid gap-3 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm md:grid-cols-2">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                              Tipo de encuesta
-                            </p>
-                            <p className="text-base font-semibold text-emerald-900">
-                              {selectedSurvey.surveyType}
-                            </p>
-                            <p className="text-sm text-emerald-500">
-                              Estado: {selectedSurvey.status ?? "Sin estado"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                              Recomendaciones
-                            </p>
-                            <p className="text-sm text-emerald-700 whitespace-pre-line">
-                              {(surveyDetail.recommendations as string) ?? "N/D"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                              Productor
-                            </p>
-                            <p className="text-sm font-semibold text-emerald-900">
-                              {(surveyDetail.producer as { name?: string })?.name ??
-                                "N/D"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                              Propiedad
-                            </p>
-                            <p className="text-sm font-semibold text-emerald-900">
-                              {(surveyDetail.property as { name?: string })?.name ??
-                                selectedProperty.name}
-                            </p>
-                          </div>
-                        </div>
-                      ) : surveyDetailLoading ? (
-                        <p className="text-sm text-emerald-500">
-                          Cargando detalle de la encuesta…
-                        </p>
-                      ) : surveyDetailError ? (
-                        <p className="text-sm text-red-600">
-                          No fue posible obtener el detalle:{" "}
-                          {surveyDetailFetchError?.message ?? "Error desconocido."}
-                        </p>
-                      ) : null
-                    ) : (
+                    {!selectedVisit ? (
                       <p className="text-sm text-emerald-500">
-                        Elige una encuesta para ver su detalle.
+                        Selecciona una visita para cargar la información.
                       </p>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
+                            type="button"
+                            onClick={() => setVisitDecision("accepted")}
+                          >
+                            <FiCheck aria-hidden />
+                            Aceptar
+                          </button>
+                          <button
+                            className="inline-flex items-center gap-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:border-red-200"
+                            type="button"
+                            onClick={() => setVisitDecision("rejected")}
+                          >
+                            <FiX aria-hidden />
+                            Rechazar
+                          </button>
+                          {visitDetail?.file_pdf ? (
+                            <a
+                              className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300"
+                              href={visitDetail.file_pdf as string}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <FiFileText aria-hidden />
+                              Ver PDF
+                              <FiExternalLink className="hidden text-emerald-500 sm:inline" aria-hidden />
+                            </a>
+                          ) : (
+                            <button
+                              className="inline-flex items-center gap-2 rounded-md border border-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-500 opacity-70"
+                              type="button"
+                              disabled
+                            >
+                              <FiFileText aria-hidden />
+                              PDF no disponible
+                            </button>
+                          )}
+                          {visitDecision ? (
+                            <span
+                              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                                visitDecision === "accepted"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {visitDecision === "accepted"
+                                ? "Marcado como aceptado (solo UI)"
+                                : "Marcado como rechazado (solo UI)"}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {surveyVisitLoading || surveyVisitFetching ? (
+                          <p className="text-sm text-emerald-500">
+                            Consultando visita {selectedVisit}...
+                          </p>
+                        ) : surveyVisitError ? (
+                          <div className="flex flex-col gap-2 rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+                            <span>
+                              No pudimos cargar la visita.{" "}
+                              {surveyVisitFetchError?.message ??
+                                "Revisa la conexión o la sesión e intenta de nuevo."}
+                            </span>
+                            <button
+                              className="w-fit rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 transition hover:border-red-300"
+                              type="button"
+                              onClick={() => refetchSurveyVisit()}
+                            >
+                              Reintentar
+                            </button>
+                          </div>
+                        ) : !visitDetail ? (
+                          <p className="text-sm text-emerald-500">
+                            No hay información registrada para la visita {selectedVisit}.
+                          </p>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="rounded-2xl bg-gradient-to-br from-emerald-900 to-emerald-800 p-5 text-white shadow-sm">
+                              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-200">
+                                    Formato institucional
+                                  </p>
+                                  <h3 className="text-2xl font-semibold">
+                                    FORMATO ACOMPAÑAMIENTO DEL EXTENSIONISTA
+                                  </h3>
+                                  <p className="text-sm text-emerald-200">
+                                    Resumen de la visita y datos consolidados.
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                  <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
+                                    Visita No. {selectedVisit}
+                                  </span>
+                                  <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
+                                    Coordenadas: {(visitPropertyData as any)?.latitude ?? "N/D"},{" "}
+                                    {(visitPropertyData as any)?.longitude ?? "N/D"}
+                                  </span>
+                                  <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
+                                    Objetivo: {visitDetail?.objetive_accompaniment ?? "Sin objetivo"}
+                                  </span>
+                                  <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
+                                    Registro:{" "}
+                                    {visitDetail?.date_acompanamiento
+                                      ? `${formatDate(visitDetail.date_acompanamiento)} ${visitDetail.hour_acompanamiento ?? ""}`.trim()
+                                      : "Sin fecha"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <SectionCard
+                              number="1."
+                              title="Identificación Del Usuario Productor"
+                            >
+                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                                <FieldItem
+                                  label="1.1 Nombre Completo Usuario Productor"
+                                  value={(visitProducer as any)?.name}
+                                />
+                                <FieldItem
+                                  label="1.2 Tipo de Documento"
+                                  value={(visitProducer as any)?.type_id}
+                                />
+                                <FieldItem
+                                  label="1.3 Número de Identificación"
+                                  value={(visitProducer as any)?.identification}
+                                />
+                                <FieldItem
+                                  label="1.4 Número Telefonico"
+                                  value={(visitProducer as any)?.number_phone}
+                                />
+                              </div>
+                            </SectionCard>
+
+                            <SectionCard
+                              number="2."
+                              title="Identificación del Predio"
+                            >
+                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                                <FieldItem
+                                  label="2.1 Nombre del Predio"
+                                  value={visitPropertyData?.name}
+                                />
+                                <FieldItem
+                                  label="2.2 ASNM"
+                                  value={(visitPropertyData as any)?.asnm}
+                                />
+                                <FieldItem
+                                  label="2.3 Departamento"
+                                  value={(visitPropertyData as any)?.state}
+                                />
+                                <FieldItem
+                                  label="2.4 Municipio"
+                                  value={(visitPropertyData as any)?.city ?? (visitPropertyData as any)?.municipality}
+                                />
+                                <FieldItem
+                                  label="2.5 Corregimiento/Vereda"
+                                  value={(visitPropertyData as any)?.village}
+                                />
+                              </div>
+                            </SectionCard>
+
+                            <SectionCard
+                              number="3."
+                              title="Identificación Del Sistema Productivo"
+                            >
+                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                                <FieldItem
+                                  label="3.1 Linea Productiva Principal"
+                                  value={(visitPropertyData as any)?.primaryLine ?? (visitPropertyData as any)?.linea_productive_primary}
+                                />
+                                <FieldItem
+                                  label="3.2 Linea Productiva Secundaria"
+                                  value={(visitPropertyData as any)?.secondaryLine ?? (visitPropertyData as any)?.linea_productive_secondary}
+                                />
+                                <FieldItem
+                                  label="3.3 Área total En Producción"
+                                  value={
+                                    ((visitPropertyData as any)?.areaInProduction ??
+                                      (visitPropertyData as any)?.area_in_production) &&
+                                    `${(visitPropertyData as any)?.areaInProduction ?? (visitPropertyData as any)?.area_in_production} ha`
+                                  }
+                                />
+                              </div>
+                            </SectionCard>
+
+                            <SectionCard
+                              number="4."
+                              title="Clasificación Del Usuario (Según Ley 1876 Del 2017)"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm text-emerald-700">
+                                    Nivel de clasificación del último diagnóstico.
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="rounded-full bg-emerald-900 px-3 py-1 text-xs font-semibold text-white">
+                                    Total: {classificationTotal ?? "N/D"}
+                                  </span>
+                                  {classificationEntries.length > 0 ? (
+                                    <button
+                                      type="button"
+                                      className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-900"
+                                      onClick={() =>
+                                        setShowClassificationDetail((prev) => !prev)
+                                      }
+                                    >
+                                      {showClassificationDetail ? "Ocultar detalle" : "Ver detalle"}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {showClassificationDetail && classificationEntries.length > 0 ? (
+                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                  {classificationEntries.map(([key, value]) => (
+                                    <div
+                                      key={key}
+                                      className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2"
+                                    >
+                                      <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                        {prettifyKey(key)}
+                                      </p>
+                                      <p className="text-sm font-semibold text-emerald-900">
+                                        {value ?? "N/D"}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </SectionCard>
+
+                            <SectionCard
+                              number="5."
+                              title="Enfoque Técnico Productivo"
+                            >
+                              <div className="space-y-3">
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                    5.0 Enfoque Técnico Productivo
+                                  </p>
+                                  <p className="mt-2 text-sm text-emerald-900">
+                                    {visitDetail?.objetive_accompaniment ?? "Sin información registrada."}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                    5.1 Diagnóstico visita
+                                  </p>
+                                  <p className="mt-2 text-sm text-emerald-900">
+                                    {visitDetail?.initial_diagnosis ?? "Sin información registrada."}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                    5.2 Recomendaciones y Compromisos
+                                  </p>
+                                  <p className="mt-2 text-sm text-emerald-900">
+                                    {visitDetail?.recommendations_commitments ??
+                                      "Sin información registrada."}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                    5.3 Se Cumplió con las recomendaciones de la visita Anterior
+                                  </p>
+                                  <p className="mt-2 text-sm text-emerald-900">
+                                    {"Sin información registrada."}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                    5.4 Observaciones visita
+                                  </p>
+                                  <p className="mt-2 text-sm text-emerald-900">
+                                    {visitDetail?.observations_visited ?? "Sin información registrada."}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                    5.5 Registro Fotográfico visita
+                                  </p>
+                                  {photoGallery.length > 0 ? (
+                                    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                      {photoGallery.map((photo) => (
+                                        <div
+                                          key={photo.label}
+                                          className="overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-sm"
+                                        >
+                                          <img
+                                            src={photo.url}
+                                            alt={photo.label}
+                                            className="h-44 w-full object-cover"
+                                          />
+                                          <p className="px-3 py-2 text-sm font-semibold text-emerald-900">
+                                            {photo.label}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="mt-2 text-sm text-emerald-700">
+                                      No se adjuntaron imágenes en esta visita.
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </SectionCard>
+
+                            {focalizationEntries.length > 0 ? (
+                              <SectionCard
+                                number="5.0"
+                                title="Medición y focalización"
+                              >
+                                <div className="grid gap-3 md:grid-cols-2">
+                                  {focalizationEntries.map(([key, value]) => (
+                                    <div
+                                      key={key}
+                                      className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <p className="text-sm font-semibold text-emerald-900">
+                                          {prettifyKey(key)}
+                                        </p>
+                                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                                          Puntaje: {value?.score ?? "N/D"}
+                                        </span>
+                                      </div>
+                                      <p className="mt-2 text-sm text-emerald-700">
+                                        {value?.obervation ?? "Sin observación registrada."}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </SectionCard>
+                            ) : null}
+
+                            <SectionCard
+                              number="6."
+                              title="Datos del Acompañamiento"
+                            >
+                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                                <FieldItem
+                                  label="6.1 Nombre Persona quien atiende el Acompañamiento"
+                                  value={visitDetail?.name_acompanamiento ?? visitDetail?.attended_by}
+                                />
+                                <FieldItem
+                                  label="6.2 Si quien atiende la visita es diferente al productor"
+                                  value={visitDetail?.attended_by}
+                                />
+                                <FieldItem
+                                  label="Fecha y hora registro Acompañamiento"
+                                  value={
+                                    visitDetail?.date_acompanamiento
+                                      ? `${formatDate(visitDetail.date_acompanamiento)} ${visitDetail.hour_acompanamiento ?? ""}`.trim()
+                                      : undefined
+                                  }
+                                />
+                                <FieldItem
+                                  label="Origen registro"
+                                  value={visitDetail?.origen_register}
+                                />
+                                <FieldItem
+                                  label="Fecha de la visita"
+                                  value={formatDate(visitDetail?.visit_date)}
+                                />
+                                <FieldItem
+                                  label="Estado actual"
+                                  value={visitDetail?.state}
+                                />
+                              </div>
+                            </SectionCard>
+
+                            <SectionCard
+                              number="7."
+                              title="Datos Del Extensionista"
+                            >
+                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                                <FieldItem
+                                  label="7.1 Nombre del Extensionista"
+                                  value={(visitExtensionist as any)?.name}
+                                />
+                                <FieldItem
+                                  label="7.2 Identificación Del Extensionista"
+                                  value={(visitExtensionist as any)?.identification}
+                                />
+                                <FieldItem
+                                  label="7.3 Perfil Profesional Del Extensionista"
+                                  value={(visitExtensionist as any)?.professional_profile}
+                                />
+                                <FieldItem
+                                  label="7.4 Fecha firma extensionista"
+                                  value={
+                                    formatDate(visitDetail?.date_hour_end ?? visitDetail?.date_acompanamiento)
+                                  }
+                                />
+                                <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 px-3 py-2">
+                                  <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                    7.5 Firma extensionista
+                                  </p>
+                                  {(visitExtensionist as any)?.signing_image_path ? (
+                                    <img
+                                      src={(visitExtensionist as any)?.signing_image_path}
+                                      alt="Firma del extensionista"
+                                      className="mt-2 h-20 w-full max-w-xs rounded-md border border-emerald-100 bg-white object-contain p-2"
+                                    />
+                                  ) : (
+                                    <p className="text-sm font-semibold text-emerald-900">
+                                      Sin firma adjunta
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </SectionCard>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                ) : (
-                  renderListState({
-                    isLoading: surveysLoading,
-                    isFetching: surveysFetching,
-                    isError: surveysError,
-                    errorMessage: surveysFetchError?.message,
-                    emptyLabel:
-                      "La propiedad seleccionada no tiene encuestas registradas.",
-                  })
                 )}
               </section>
             </>
