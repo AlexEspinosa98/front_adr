@@ -3,6 +3,7 @@
 import {
   FormEvent,
   useCallback,
+  useEffect,
   useState,
   type ReactNode,
 } from "react";
@@ -84,22 +85,111 @@ const SectionCard = ({
   </div>
 );
 
-const FieldItem = ({
+const FieldInput = ({
   label,
   value,
+  onChange,
+  type = "text",
+  placeholder,
+  options,
+  readOnly = false,
+  highlight = false,
 }: {
   label: string;
   value?: string | number | null;
-}) => (
-  <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 px-3 py-2">
-    <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-      {label}
-    </p>
-    <p className="text-sm font-semibold text-emerald-900">
-      {value ?? "Sin información"}
-    </p>
-  </div>
-);
+  onChange?: (next: string) => void;
+  type?: "text" | "textarea" | "select";
+  placeholder?: string;
+  options?: string[];
+  readOnly?: boolean;
+  highlight?: boolean;
+}) => {
+  const baseClasses =
+    "w-full rounded-md border border-emerald-100 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200";
+  const disabledClasses = "bg-emerald-50 text-emerald-700 cursor-not-allowed";
+  const containerClasses = highlight
+    ? "rounded-lg border border-emerald-200 bg-emerald-50/70 p-3"
+    : "rounded-lg border border-emerald-50 bg-emerald-50/60 p-3";
+
+  return (
+    <div className={containerClasses}>
+      <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+        {label}
+      </p>
+      {type === "textarea" ? (
+        <textarea
+          className={`${baseClasses} mt-2 min-h-[96px] ${readOnly ? disabledClasses : ""}`}
+          value={value ?? ""}
+          placeholder={placeholder}
+          onChange={(e) => onChange?.(e.target.value)}
+          readOnly={readOnly}
+        />
+      ) : type === "select" && options ? (
+        <select
+          className={`${baseClasses} mt-2 ${readOnly ? disabledClasses : ""}`}
+          value={value ?? ""}
+          onChange={(e) => onChange?.(e.target.value)}
+          disabled={readOnly}
+        >
+          <option value="" disabled>
+            Selecciona...
+          </option>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          className={`${baseClasses} mt-2 ${readOnly ? disabledClasses : ""}`}
+          value={value ?? ""}
+          placeholder={placeholder}
+          onChange={(e) => onChange?.(e.target.value)}
+          readOnly={readOnly}
+        />
+      )}
+    </div>
+  );
+};
+
+const DEPARTMENTS = ["Magdalena", "Atlantico"] as const;
+
+const MUNICIPALITIES: Record<(typeof DEPARTMENTS)[number], string[]> = {
+  Magdalena: [
+    "Cerro San Antonio",
+    "Chivolo",
+    "Ciénaga",
+    "Concordia",
+    "El Banco",
+    "El Piñon",
+    "Fundacion",
+    "GUAMAL",
+    "Nueva Granada",
+    "Pedraza",
+    "Pivijay",
+    "Plato",
+    "Sabana de San Angel",
+    "Salamina",
+    "San Zenón",
+    "Santa Marta",
+    "Tenerife",
+    "Zapayan",
+    "Zona Bananera",
+  ],
+  Atlantico: [
+    "Baranoa",
+    "Malambo",
+    "Manatí",
+    "Palmar De Varela",
+    "Sabanalarga",
+    "Santa Lucía",
+    "Suan",
+    "Luruaco",
+    "Ponedera",
+    "Tubará",
+  ],
+};
 
 export const AdminExplorerView = () => {
   const { data: session } = useSession();
@@ -120,6 +210,14 @@ export const AdminExplorerView = () => {
   >(null);
   const [showClassificationDetail, setShowClassificationDetail] =
     useState(false);
+  const [editableVisit, setEditableVisit] = useState<Record<string, unknown> | null>(
+    null,
+  );
+  const [editableProducer, setEditableProducer] =
+    useState<Record<string, unknown> | null>(null);
+  const [editableProperty, setEditableProperty] =
+    useState<Record<string, unknown> | null>(null);
+  const [approvalProfile, setApprovalProfile] = useState("");
   const [activeView, setActiveView] = useState<"stats" | "visits">("stats");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
@@ -145,6 +243,10 @@ export const AdminExplorerView = () => {
     setSelectedVisit(null);
     setVisitDecision(null);
     setShowClassificationDetail(false);
+    setEditableVisit(null);
+    setEditableProducer(null);
+    setEditableProperty(null);
+    setApprovalProfile("");
     setCurrentPage(1);
     setExpandedPropertyId(null);
     setPropertySearch("");
@@ -287,6 +389,10 @@ export const AdminExplorerView = () => {
     setSelectedVisit(null);
     setVisitDecision(null);
     setShowClassificationDetail(false);
+    setEditableVisit(null);
+    setEditableProducer(null);
+    setEditableProperty(null);
+    setApprovalProfile("");
     setPropertySearch("");
     setPropertyPage(1);
   };
@@ -330,6 +436,15 @@ export const AdminExplorerView = () => {
     if (!value) return undefined;
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString();
+  };
+
+  const formatDateWithTime = (date?: string | null, time?: string | null) => {
+    if (!date) return undefined;
+    const parsed = new Date(date);
+    const datePart = Number.isNaN(parsed.getTime())
+      ? date
+      : parsed.toLocaleDateString();
+    return time ? `${datePart} ${time}`.trim() : datePart;
   };
 
   const prettifyKey = (key: string) =>
@@ -390,6 +505,47 @@ export const AdminExplorerView = () => {
   ).filter(
     (photo): photo is { label: string; url: string } => Boolean(photo.url),
   );
+
+  useEffect(() => {
+    if (visitDetail) {
+      setEditableVisit({
+        ...visitDetail,
+        origen_register: (visitDetail as any)?.origen_register ?? "app_movil",
+        attended_by: (visitDetail as any)?.attended_by ?? "Usuario Productor",
+      });
+      setApprovalProfile(
+        ((visitDetail as any)?.approval_profile as string | undefined) ?? "",
+      );
+    } else {
+      setEditableVisit(null);
+      setApprovalProfile("");
+    }
+  }, [visitDetail]);
+
+  useEffect(() => {
+    setEditableProducer((visitProducer as Record<string, unknown>) ?? null);
+  }, [visitProducer]);
+
+  useEffect(() => {
+    setEditableProperty((visitPropertyData as Record<string, unknown>) ?? null);
+  }, [visitPropertyData]);
+
+  const updateVisitField = (key: string, value: string) => {
+    setEditableVisit((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const updateProducerField = (key: string, value: string) => {
+    setEditableProducer((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const updatePropertyField = (key: string, value: string) => {
+    setEditableProperty((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+  const selectedDepartment = (editableProperty as any)?.state as
+    | (typeof DEPARTMENTS)[number]
+    | undefined;
+  const availableMunicipalities =
+    MUNICIPALITIES[selectedDepartment ?? "Magdalena"] ?? [];
   return (
     <div className="flex min-h-screen bg-emerald-50">
       <aside className="hidden w-64 shrink-0 flex-col gap-2 bg-white p-6 shadow-sm ring-1 ring-emerald-100 lg:flex">
@@ -795,6 +951,10 @@ export const AdminExplorerView = () => {
                                 setSelectedVisit(1);
                                 setVisitDecision(null);
                                 setShowClassificationDetail(false);
+                                setEditableVisit(null);
+                                setEditableProducer(null);
+                                setEditableProperty(null);
+                                setApprovalProfile("");
                                 setExpandedPropertyId(property.id);
                               }}
                             >
@@ -869,6 +1029,10 @@ export const AdminExplorerView = () => {
                                     setSelectedVisit(1);
                                     setVisitDecision(null);
                                     setShowClassificationDetail(false);
+                                    setEditableVisit(null);
+                                    setEditableProducer(null);
+                                    setEditableProperty(null);
+                                    setApprovalProfile("");
                                   }}
                                 >
                                   Ver encuestas
@@ -969,6 +1133,10 @@ export const AdminExplorerView = () => {
                                 setSelectedVisit(num);
                                 setVisitDecision(null);
                                 setShowClassificationDetail(false);
+                                setEditableVisit(null);
+                                setEditableProducer(null);
+                                setEditableProperty(null);
+                                setApprovalProfile("");
                               }}
                             >
                               Visita {num}
@@ -986,9 +1154,15 @@ export const AdminExplorerView = () => {
                       <div className="space-y-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <button
-                            className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
+                            className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                             type="button"
                             onClick={() => setVisitDecision("accepted")}
+                            disabled={!approvalProfile.trim()}
+                            title={
+                              approvalProfile.trim()
+                                ? "Marcar como aceptado"
+                                : "Agrega el perfil antes de aceptar"
+                            }
                           >
                             <FiCheck aria-hidden />
                             Aceptar
@@ -1035,6 +1209,15 @@ export const AdminExplorerView = () => {
                                 : "Marcado como rechazado (solo UI)"}
                             </span>
                           ) : null}
+                          <div className="w-full max-w-xs">
+                            <FieldInput
+                              label="Perfil (requerido para aceptar)"
+                              value={approvalProfile}
+                              onChange={(v) => setApprovalProfile(v)}
+                              placeholder="Ingresa el perfil antes de aceptar"
+                              highlight
+                            />
+                          </div>
                         </div>
 
                         {surveyVisitLoading || surveyVisitFetching ? (
@@ -1080,226 +1263,321 @@ export const AdminExplorerView = () => {
                                     Visita No. {selectedVisit}
                                   </span>
                                   <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
-                                    Coordenadas: {(visitPropertyData as any)?.latitude ?? "N/D"},{" "}
-                                    {(visitPropertyData as any)?.longitude ?? "N/D"}
-                                  </span>
-                                  <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
-                                    Objetivo: {visitDetail?.objetive_accompaniment ?? "Sin objetivo"}
+                                    Coordenadas: {(editableProperty as any)?.latitude ?? "N/D"},{" "}
+                                    {(editableProperty as any)?.longitude ?? "N/D"}
                                   </span>
                                   <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
                                     Registro:{" "}
-                                    {visitDetail?.date_acompanamiento
-                                      ? `${formatDate(visitDetail.date_acompanamiento)} ${visitDetail.hour_acompanamiento ?? ""}`.trim()
+                                    {editableVisit?.date_acompanamiento
+                                      ? `${formatDate(editableVisit.date_acompanamiento as string)} ${editableVisit.hour_acompanamiento ?? ""}`.trim()
                                       : "Sin fecha"}
                                   </span>
                                 </div>
                               </div>
                             </div>
 
-                            <SectionCard
-                              number="1."
-                              title="Identificación Del Usuario Productor"
-                            >
-                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                                <FieldItem
-                                  label="1.1 Nombre Completo Usuario Productor"
-                                  value={(visitProducer as any)?.name}
+                            <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                              <div className="grid gap-3 lg:grid-cols-2">
+                                <FieldInput
+                                  label="Objetivo del Acompañamiento"
+                                  value={editableVisit?.objetive_accompaniment as string}
+                                  onChange={(v) => updateVisitField("objetive_accompaniment", v)}
+                                  placeholder="Redacte y escriba el objetivo acorde a lo definido por la EPSEA"
+                                  highlight
                                 />
-                                <FieldItem
-                                  label="1.2 Tipo de Documento"
-                                  value={(visitProducer as any)?.type_id}
-                                />
-                                <FieldItem
-                                  label="1.3 Número de Identificación"
-                                  value={(visitProducer as any)?.identification}
-                                />
-                                <FieldItem
-                                  label="1.4 Número Telefonico"
-                                  value={(visitProducer as any)?.number_phone}
-                                />
-                              </div>
-                            </SectionCard>
-
-                            <SectionCard
-                              number="2."
-                              title="Identificación del Predio"
-                            >
-                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                                <FieldItem
-                                  label="2.1 Nombre del Predio"
-                                  value={visitPropertyData?.name}
-                                />
-                                <FieldItem
-                                  label="2.2 ASNM"
-                                  value={(visitPropertyData as any)?.asnm}
-                                />
-                                <FieldItem
-                                  label="2.3 Departamento"
-                                  value={(visitPropertyData as any)?.state}
-                                />
-                                <FieldItem
-                                  label="2.4 Municipio"
-                                  value={(visitPropertyData as any)?.city ?? (visitPropertyData as any)?.municipality}
-                                />
-                                <FieldItem
-                                  label="2.5 Corregimiento/Vereda"
-                                  value={(visitPropertyData as any)?.village}
-                                />
-                              </div>
-                            </SectionCard>
-
-                            <SectionCard
-                              number="3."
-                              title="Identificación Del Sistema Productivo"
-                            >
-                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                                <FieldItem
-                                  label="3.1 Linea Productiva Principal"
-                                  value={(visitPropertyData as any)?.primaryLine ?? (visitPropertyData as any)?.linea_productive_primary}
-                                />
-                                <FieldItem
-                                  label="3.2 Linea Productiva Secundaria"
-                                  value={(visitPropertyData as any)?.secondaryLine ?? (visitPropertyData as any)?.linea_productive_secondary}
-                                />
-                                <FieldItem
-                                  label="3.3 Área total En Producción"
+                                <FieldInput
+                                  label="Creada"
                                   value={
-                                    ((visitPropertyData as any)?.areaInProduction ??
-                                      (visitPropertyData as any)?.area_in_production) &&
-                                    `${(visitPropertyData as any)?.areaInProduction ?? (visitPropertyData as any)?.area_in_production} ha`
+                                    formatDateWithTime(
+                                      (editableVisit?.date_acompanamiento as string) ??
+                                        ((visitDetail as any)?.created_at as string | undefined),
+                                      (editableVisit?.hour_acompanamiento as string) ??
+                                        (visitDetail as any)?.hour_acompanamiento,
+                                    ) ?? ""
                                   }
+                                  readOnly
+                                  highlight
                                 />
                               </div>
+                            </div>
+
+                            <SectionCard number="1." title="Identificación Del Usuario Productor">
+                              <div className="grid gap-2 lg:grid-cols-3">
+                                <FieldInput
+                                  label="Nombre Completo Usuario Productor"
+                                  value={(editableProducer as any)?.name}
+                                  onChange={(v) => updateProducerField("name", v)}
+                                  placeholder="Ej: Juan Carlos Pérez Gómez"
+                                />
+                                <FieldInput
+                                  label="Tipo de Documento"
+                                  type="select"
+                                  options={["CC", "TI", "CE", "NIT"]}
+                                  value={(editableProducer as any)?.type_id}
+                                  onChange={(v) => updateProducerField("type_id", v)}
+                                />
+                                <FieldInput
+                                  label="Número de Identificacion"
+                                  value={(editableProducer as any)?.identification}
+                                  onChange={(v) => updateProducerField("identification", v)}
+                                  placeholder="Ej: 1234567890"
+                                />
+                                <FieldInput
+                                  label="Número Telefonico"
+                                  value={(editableProducer as any)?.number_phone}
+                                  onChange={(v) => updateProducerField("number_phone", v)}
+                                  placeholder="Ej: 3001234567"
+                                />
+                              </div>
+                            </SectionCard>
+
+                            <SectionCard number="2." title="Identificación del Predio">
+                              <div className="grid gap-2 lg:grid-cols-3">
+                                <FieldInput
+                                  label="Nombre del Predio"
+                                  value={(editableProperty as any)?.name}
+                                  onChange={(v) => updatePropertyField("name", v)}
+                                  placeholder="Ej: Finca La Esperanza"
+                                />
+                                <FieldInput
+                                  label="Coordenadas Geográficas"
+                                  value={[
+                                    (editableProperty as any)?.latitude ?? "",
+                                    (editableProperty as any)?.longitude ?? "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(", ")}
+                                  onChange={(v) => {
+                                    const [lat, lon] = v.split(",").map((part) => part.trim());
+                                    setEditableProperty((prev) =>
+                                      prev
+                                        ? { ...prev, latitude: lat ?? "", longitude: lon ?? "" }
+                                        : prev,
+                                    );
+                                  }}
+                                  placeholder="Ej: 10.188612074, -74.065231283"
+                                />
+                                <FieldInput
+                                  label="ASNM"
+                                  value={(editableProperty as any)?.asnm}
+                                  onChange={(v) => updatePropertyField("asnm", v)}
+                                  placeholder="Ej: 0"
+                                />
+                                <FieldInput
+                                  label="Departamento"
+                                  type="select"
+                                  options={[...DEPARTMENTS] as string[]}
+                                  value={(editableProperty as any)?.state}
+                                  onChange={(v) => updatePropertyField("state", v)}
+                                />
+                                <FieldInput
+                                  label="Municipio"
+                                  type="select"
+                                  options={availableMunicipalities}
+                                  value={(editableProperty as any)?.city ?? (editableProperty as any)?.municipality}
+                                  onChange={(v) => {
+                                    updatePropertyField("city", v);
+                                    updatePropertyField("municipality", v);
+                                  }}
+                                />
+                                <FieldInput
+                                  label="Corregimiento/Vereda"
+                                  value={(editableProperty as any)?.village}
+                                  onChange={(v) => updatePropertyField("village", v)}
+                                  placeholder="Ej: Vereda Mock"
+                                />
+                              </div>
+                            </SectionCard>
+
+                            <SectionCard number="3." title="Identificación Del Sistema Productivo">
+                              <div className="grid gap-2 lg:grid-cols-2">
+                                <FieldInput
+                                  label="Linea Productiva Principal"
+                                  value={
+                                    (editableProperty as any)?.primaryLine ??
+                                    (editableProperty as any)?.linea_productive_primary
+                                  }
+                                  onChange={(v) => {
+                                    updatePropertyField("primaryLine", v);
+                                    updatePropertyField("linea_productive_primary", v);
+                                  }}
+                                  placeholder="Ej: Cacao"
+                                />
+                                <FieldInput
+                                  label="Linea Productiva Secundaria"
+                                  value={
+                                    (editableProperty as any)?.secondaryLine ??
+                                    (editableProperty as any)?.linea_productive_secondary
+                                  }
+                                  onChange={(v) => {
+                                    updatePropertyField("secondaryLine", v);
+                                    updatePropertyField("linea_productive_secondary", v);
+                                  }}
+                                  placeholder="Ej: Otra"
+                                />
+                              </div>
+                              <FieldInput
+                                label="Área total En Producción"
+                                value={
+                                  (editableProperty as any)?.areaInProduction ??
+                                  (editableProperty as any)?.area_in_production
+                                }
+                                onChange={(v) => {
+                                  updatePropertyField("areaInProduction", v);
+                                  updatePropertyField("area_in_production", v);
+                                }}
+                                placeholder="Ej: 15.50"
+                              />
                             </SectionCard>
 
                             <SectionCard
                               number="4."
                               title="Clasificación Del Usuario (Según Ley 1876 Del 2017)"
                             >
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-sm text-emerald-700">
-                                    Nivel de clasificación del último diagnóstico.
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="rounded-full bg-emerald-900 px-3 py-1 text-xs font-semibold text-white">
-                                    Total: {classificationTotal ?? "N/D"}
-                                  </span>
-                                  {classificationEntries.length > 0 ? (
-                                    <button
-                                      type="button"
-                                      className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-900"
-                                      onClick={() =>
-                                        setShowClassificationDetail((prev) => !prev)
-                                      }
-                                    >
-                                      {showClassificationDetail ? "Ocultar detalle" : "Ver detalle"}
-                                    </button>
-                                  ) : null}
-                                </div>
-                              </div>
-                              {showClassificationDetail && classificationEntries.length > 0 ? (
-                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                  {classificationEntries.map(([key, value]) => (
-                                    <div
-                                      key={key}
-                                      className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2"
-                                    >
-                                      <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
-                                        {prettifyKey(key)}
-                                      </p>
-                                      <p className="text-sm font-semibold text-emerald-900">
-                                        {value ?? "N/D"}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </SectionCard>
-
-                            <SectionCard
-                              number="5."
-                              title="Enfoque Técnico Productivo"
-                            >
-                              <div className="space-y-3">
-                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
-                                    5.0 Enfoque Técnico Productivo
-                                  </p>
-                                  <p className="mt-2 text-sm text-emerald-900">
-                                    {visitDetail?.objetive_accompaniment ?? "Sin información registrada."}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
-                                    5.1 Diagnóstico visita
-                                  </p>
-                                  <p className="mt-2 text-sm text-emerald-900">
-                                    {visitDetail?.initial_diagnosis ?? "Sin información registrada."}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
-                                    5.2 Recomendaciones y Compromisos
-                                  </p>
-                                  <p className="mt-2 text-sm text-emerald-900">
-                                    {visitDetail?.recommendations_commitments ??
-                                      "Sin información registrada."}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
-                                    5.3 Se Cumplió con las recomendaciones de la visita Anterior
-                                  </p>
-                                  <p className="mt-2 text-sm text-emerald-900">
-                                    {"Sin información registrada."}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
-                                    5.4 Observaciones visita
-                                  </p>
-                                  <p className="mt-2 text-sm text-emerald-900">
-                                    {visitDetail?.observations_visited ?? "Sin información registrada."}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
-                                    5.5 Registro Fotográfico visita
-                                  </p>
-                                  {photoGallery.length > 0 ? (
-                                    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                      {photoGallery.map((photo) => (
+                              <FieldInput
+                                label="Nivel de clasificación (último diagnóstico aplicado)"
+                                value={classificationTotal ?? "N/D"}
+                                readOnly
+                              />
+                              {classificationEntries.length > 0 ? (
+                                <div className="pt-2">
+                                  <button
+                                    type="button"
+                                    className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-900"
+                                    onClick={() => setShowClassificationDetail((prev) => !prev)}
+                                  >
+                                    {showClassificationDetail ? "Ocultar detalle" : "Ver detalle"}
+                                  </button>
+                                  {showClassificationDetail ? (
+                                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                      {classificationEntries.map(([key, value]) => (
                                         <div
-                                          key={photo.label}
-                                          className="overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-sm"
+                                          key={key}
+                                          className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2"
                                         >
-                                          <img
-                                            src={photo.url}
-                                            alt={photo.label}
-                                            className="h-44 w-full object-cover"
-                                          />
-                                          <p className="px-3 py-2 text-sm font-semibold text-emerald-900">
-                                            {photo.label}
+                                          <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                            {prettifyKey(key)}
+                                          </p>
+                                          <p className="text-sm font-semibold text-emerald-900">
+                                            {value ?? "N/D"}
                                           </p>
                                         </div>
                                       ))}
                                     </div>
-                                  ) : (
-                                    <p className="mt-2 text-sm text-emerald-700">
-                                      No se adjuntaron imágenes en esta visita.
-                                    </p>
-                                  )}
+                                  ) : null}
                                 </div>
+                              ) : null}
+                            </SectionCard>
+
+                            <SectionCard number="5." title="Enfoque Técnico Productivo">
+                              <FieldInput
+                                label="Objetivo del Acompañamiento"
+                                value={editableVisit?.objetive_accompaniment as string}
+                                onChange={(v) => updateVisitField("objetive_accompaniment", v)}
+                                type="textarea"
+                                placeholder="Redacte y escriba el objetivo acorde a lo definido por la EPSEA"
+                                highlight
+                              />
+                              <FieldInput
+                                label="5.1 Diagnóstico visita"
+                                value={editableVisit?.initial_diagnosis as string}
+                                onChange={(v) => updateVisitField("initial_diagnosis", v)}
+                                type="textarea"
+                                placeholder="Describa hallazgos y situación encontrada en la finca"
+                              />
+                              <FieldInput
+                                label="5.2 Recomendaciones  y Compromisos"
+                                value={editableVisit?.recommendations_commitments as string}
+                                onChange={(v) =>
+                                  updateVisitField("recommendations_commitments", v)
+                                }
+                                type="textarea"
+                                placeholder="Plantee recomendaciones técnicas relevantes"
+                              />
+                              {selectedVisit !== 1 ? (
+                                <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
+                                  <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                    5.3 Se Cumplió con las recomendaciones de la visita Anterior
+                                  </p>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {["SI", "NO", "No aplica"].map((option) => {
+                                      const isActive =
+                                        (editableVisit?.compliance_status as string) === option;
+                                      return (
+                                        <button
+                                          key={option}
+                                          type="button"
+                                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                                            isActive
+                                              ? "bg-emerald-900 text-white"
+                                              : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                          }`}
+                                          onClick={() => updateVisitField("compliance_status", option)}
+                                        >
+                                          {option}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : null}
+                              <FieldInput
+                                label="5.4 Observaciones visita"
+                                value={editableVisit?.observations_visited as string}
+                                onChange={(v) => updateVisitField("observations_visited", v)}
+                                type="textarea"
+                              />
+                              <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
+                                <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                  5.5 Registro Fotográfico visita
+                                </p>
+                                {photoGallery.length > 0 ? (
+                                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                    {photoGallery.map((photo) => (
+                                      <div
+                                        key={photo.label}
+                                        className="overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-sm"
+                                      >
+                                        <img
+                                          src={photo.url}
+                                          alt={photo.label}
+                                          className="h-44 w-full object-cover"
+                                        />
+                                        <div className="flex items-center justify-between px-3 py-2">
+                                          <p className="text-sm font-semibold text-emerald-900">
+                                            {photo.label}
+                                          </p>
+                                          <a
+                                            className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+                                            href={photo.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            Ver grande
+                                          </a>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 grid gap-2 text-sm text-emerald-800 sm:grid-cols-2 lg:grid-cols-4">
+                                    {["archivo imagen 1", "archivo imagen 2", "archivo imagen 3", "archivo imagen 4"].map(
+                                      (label) => (
+                                        <div
+                                          key={label}
+                                          className="flex h-32 items-center justify-center rounded-md border border-dashed border-emerald-200 bg-white text-emerald-500"
+                                        >
+                                          {label}
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </SectionCard>
 
                             {focalizationEntries.length > 0 ? (
-                              <SectionCard
-                                number="5.0"
-                                title="Medición y focalización"
-                              >
+                              <SectionCard number="5.6" title="Medición y focalización">
                                 <div className="grid gap-3 md:grid-cols-2">
                                   {focalizationEntries.map(([key, value]) => (
                                     <div
@@ -1323,68 +1601,109 @@ export const AdminExplorerView = () => {
                               </SectionCard>
                             ) : null}
 
-                            <SectionCard
-                              number="6."
-                              title="Datos del Acompañamiento"
-                            >
-                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                                <FieldItem
-                                  label="6.1 Nombre Persona quien atiende el Acompañamiento"
-                                  value={visitDetail?.name_acompanamiento ?? visitDetail?.attended_by}
-                                />
-                                <FieldItem
-                                  label="6.2 Si quien atiende la visita es diferente al productor"
-                                  value={visitDetail?.attended_by}
-                                />
-                                <FieldItem
-                                  label="Fecha y hora registro Acompañamiento"
+                            <SectionCard number="6." title="Datos del Acompañamiento">
+                              <div className="grid gap-2 lg:grid-cols-3">
+                                <FieldInput
+                                  label="Fecha y hora registro Acompañamiento (automática)"
                                   value={
-                                    visitDetail?.date_acompanamiento
-                                      ? `${formatDate(visitDetail.date_acompanamiento)} ${visitDetail.hour_acompanamiento ?? ""}`.trim()
-                                      : undefined
+                                    editableVisit?.date_acompanamiento
+                                      ? `${formatDate(editableVisit.date_acompanamiento as string)} ${editableVisit.hour_acompanamiento ?? ""}`.trim()
+                                      : "Sin fecha"
                                   }
+                                  readOnly
                                 />
-                                <FieldItem
+                                <FieldInput
                                   label="Origen registro"
-                                  value={visitDetail?.origen_register}
+                                  value="app_movil"
+                                  readOnly
                                 />
-                                <FieldItem
+                                <FieldInput
                                   label="Fecha de la visita"
-                                  value={formatDate(visitDetail?.visit_date)}
+                                  value={formatDate(editableVisit?.visit_date as string)}
+                                  onChange={(v) => updateVisitField("visit_date", v)}
+                                  placeholder="AAAA-MM-DD"
                                 />
-                                <FieldItem
+                                <FieldInput
+                                  label="Nombre Persona quien atiende el Acompañamiento"
+                                  value={
+                                    (editableVisit?.name_acompanamiento as string) ??
+                                    (editableVisit?.attended_by as string)
+                                  }
+                                  onChange={(v) => updateVisitField("name_acompanamiento", v)}
+                                  placeholder="Ej: Usuario Productor"
+                                />
+                                <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
+                                  <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                    Rol de quien atiende
+                                  </p>
+                                  <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                                    {[
+                                      "Usuario Productor",
+                                      "Trabajador UP",
+                                      "Persona núcleo familiar",
+                                      "Otro",
+                                    ].map((role) => {
+                                      const isActive =
+                                        (editableVisit?.attended_by as string) === role;
+                                      return (
+                                        <button
+                                          key={role}
+                                          type="button"
+                                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                                            isActive
+                                              ? "bg-emerald-900 text-white"
+                                              : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                          }`}
+                                          onClick={() => updateVisitField("attended_by", role)}
+                                        >
+                                          {role}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {(editableVisit?.attended_by as string) &&
+                                  (editableVisit?.attended_by as string) !== "Usuario Productor" ? (
+                                    <FieldInput
+                                      label="Solo si quien atiende es diferente al productor"
+                                      value={editableVisit?.attendee_role as string}
+                                      onChange={(v) => updateVisitField("attendee_role", v)}
+                                      placeholder="Trabajador UP, Persona Núcleo Familiar, Otro"
+                                    />
+                                  ) : null}
+                                </div>
+                                <FieldInput
                                   label="Estado actual"
-                                  value={visitDetail?.state}
+                                  value={editableVisit?.state as string}
+                                  readOnly
                                 />
                               </div>
                             </SectionCard>
 
-                            <SectionCard
-                              number="7."
-                              title="Datos Del Extensionista"
-                            >
+                            <SectionCard number="7." title="Datos Del Extensionista">
                               <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                                <FieldItem
-                                  label="7.1 Nombre del Extensionista"
+                                <FieldInput
+                                  label="Nombre del Extensionista"
                                   value={(visitExtensionist as any)?.name}
+                                  readOnly
                                 />
-                                <FieldItem
-                                  label="7.2 Identificación Del Extensionista"
+                                <FieldInput
+                                  label="Identificación Del Extensionista"
                                   value={(visitExtensionist as any)?.identification}
+                                  readOnly
                                 />
-                                <FieldItem
-                                  label="7.3 Perfil Profesional Del Extensionista"
-                                  value={(visitExtensionist as any)?.professional_profile}
-                                />
-                                <FieldItem
-                                  label="7.4 Fecha firma extensionista"
+                                <FieldInput
+                                  label="Fecha firma extensionista"
                                   value={
-                                    formatDate(visitDetail?.date_hour_end ?? visitDetail?.date_acompanamiento)
+                                    formatDate(
+                                      (visitDetail?.date_hour_end as string) ??
+                                        (visitDetail?.date_acompanamiento as string),
+                                    ) ?? ""
                                   }
+                                  readOnly
                                 />
-                                <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 px-3 py-2">
+                                <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
                                   <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-                                    7.5 Firma extensionista
+                                    Firma extensionista
                                   </p>
                                   {(visitExtensionist as any)?.signing_image_path ? (
                                     <img
