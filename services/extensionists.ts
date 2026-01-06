@@ -27,6 +27,7 @@ export interface ExtensionistFilters {
   identification?: string;
   phone?: string;
   city?: string;
+  zone?: string;
 }
 
 const sanitizeFilters = (filters: ExtensionistFilters) => {
@@ -63,7 +64,7 @@ export const fetchExtensionists = async (
 };
 
 export const fetchExtensionistsFull = async (
-  filters: Pick<ExtensionistFilters, "name" | "email"> = {},
+  filters: Pick<ExtensionistFilters, "name" | "email" | "city" | "zone"> = {},
   token?: string,
   tokenType: string = "Token",
 ) => {

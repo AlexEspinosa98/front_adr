@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Session } from "next-auth";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -36,6 +36,7 @@ import {
   ExtensionistProperty,
   fetchPropertySurveyVisit,
   fetchExtensionistProperties,
+  updateSurveyState,
 } from "@/services/properties";
 import { fetchSurveyStatistics } from "@/services/statistics";
 import { ExtensionistChart } from "./charts/ExtensionistChart";
@@ -197,6 +198,8 @@ export const AdminExplorerView = () => {
   const tokenType = (session as SessionWithToken | null)?.tokenType ?? "Token";
   const [nameInput, setNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
+  const [cityFilter, setCityFilter] = useState<string | undefined>(undefined);
+  const [zoneFilter, setZoneFilter] = useState<string | undefined>(undefined);
   const [appliedFilters, setAppliedFilters] = useState<
     Pick<ExtensionistFilters, "name" | "email">
   >({});
@@ -218,6 +221,8 @@ export const AdminExplorerView = () => {
   const [editableProperty, setEditableProperty] =
     useState<Record<string, unknown> | null>(null);
   const [approvalProfile, setApprovalProfile] = useState("");
+  const [decisionReason, setDecisionReason] = useState("");
+  const [decisionError, setDecisionError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"stats" | "visits">("stats");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
@@ -232,12 +237,19 @@ export const AdminExplorerView = () => {
       enabled: Boolean(accessToken),
     });
 
-  const handleFilterSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const applyFiltersAndReset = ({
+    cityOverride,
+    zoneOverride,
+  }: { cityOverride?: string | undefined; zoneOverride?: string | undefined } = {}) => {
+    const cityValue = cityOverride ?? (cityFilter?.trim() || undefined);
+    const zoneValue = zoneOverride ?? (zoneFilter?.trim() || undefined);
+    setCityFilter(cityValue);
+    setZoneFilter(zoneValue);
     setAppliedFilters({
       name: nameInput.trim() || undefined,
       email: emailInput.trim() || undefined,
     });
+    setCurrentPage(1);
     setSelectedExtensionist(null);
     setSelectedProperty(null);
     setSelectedVisit(null);
@@ -247,10 +259,16 @@ export const AdminExplorerView = () => {
     setEditableProducer(null);
     setEditableProperty(null);
     setApprovalProfile("");
-    setCurrentPage(1);
+    setDecisionReason("");
+    setDecisionError(null);
     setExpandedPropertyId(null);
     setPropertySearch("");
     setPropertyPage(1);
+  };
+
+  const handleFilterSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    applyFiltersAndReset();
   };
 
   const {
@@ -268,10 +286,21 @@ export const AdminExplorerView = () => {
   });
 
   const extensionists = extensionistsResponse?.data ?? [];
+  const availableCities = Array.from(
+    new Set(extensionists.map((item) => item.city).filter(Boolean) as string[]),
+  );
+  const availableZones = Array.from(
+    new Set(extensionists.map((item) => item.zone).filter(Boolean) as string[]),
+  );
+  const filteredExtensionists = extensionists.filter((ext) => {
+    const matchesCity = cityFilter ? ext.city === cityFilter : true;
+    const matchesZone = zoneFilter ? ext.zone === zoneFilter : true;
+    return matchesCity && matchesZone;
+  });
   const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(extensionists.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredExtensionists.length / pageSize));
   const currentPageSafe = Math.min(currentPage, totalPages);
-  const paginatedExtensionists = extensionists.slice(
+  const paginatedExtensionists = filteredExtensionists.slice(
     (currentPageSafe - 1) * pageSize,
     currentPageSafe * pageSize,
   );
@@ -393,6 +422,8 @@ export const AdminExplorerView = () => {
     setEditableProducer(null);
     setEditableProperty(null);
     setApprovalProfile("");
+    setDecisionReason("");
+    setDecisionError(null);
     setPropertySearch("");
     setPropertyPage(1);
   };
@@ -550,6 +581,43 @@ export const AdminExplorerView = () => {
     | undefined;
   const availableMunicipalities =
     MUNICIPALITIES[selectedDepartment ?? "Magdalena"] ?? [];
+  const { mutateAsync: mutateSurveyState, isPending: decisionLoading } = useMutation({
+    mutationFn: updateSurveyState,
+  });
+
+  const handleDecisionSubmit = async (state: "accepted" | "rejected") => {
+    if (!approvalProfile.trim()) {
+      setDecisionError("Agrega el perfil antes de aceptar o rechazar.");
+      return;
+    }
+    if (!selectedVisit || !visitDetail?.id) {
+      setDecisionError("No hay visita cargada para actualizar.");
+      return;
+    }
+    setDecisionError(null);
+    try {
+      const response = await mutateSurveyState({
+        surveyTypeId: selectedVisit,
+        surveyId: visitDetail.id,
+        state,
+        stateReason: decisionReason || undefined,
+        perfil: approvalProfile.trim(),
+        token: accessToken,
+        tokenType,
+      });
+      if (response?.data) {
+        setEditableVisit(response.data as Record<string, unknown>);
+        setVisitDecision(state);
+      }
+      refetchSurveyVisit();
+    } catch (error: any) {
+      const message =
+        (error?.response?.data as any)?.message ??
+        error?.message ??
+        "No fue posible actualizar el estado.";
+      setDecisionError(message);
+    }
+  };
   return (
     <div className="flex min-h-screen bg-emerald-50">
       <aside className="hidden w-64 shrink-0 flex-col gap-2 bg-white p-6 shadow-sm ring-1 ring-emerald-100 lg:flex">
@@ -758,6 +826,15 @@ export const AdminExplorerView = () => {
                         setSelectedProperty(null);
                         setSelectedVisit(null);
                         setVisitDecision(null);
+                        setCityFilter(undefined);
+                        setZoneFilter(undefined);
+                        setShowClassificationDetail(false);
+                        setEditableVisit(null);
+                        setEditableProducer(null);
+                        setEditableProperty(null);
+                        setApprovalProfile("");
+                        setDecisionReason("");
+                        setDecisionError(null);
                         setCurrentPage(1);
                         refetchExtensionists();
                       }}
@@ -766,6 +843,48 @@ export const AdminExplorerView = () => {
                     </button>
                   </div>
                 </form>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="text-sm font-semibold text-emerald-700">
+                    Ciudad (selecciona para filtrar)
+                    <select
+                      className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      value={cityFilter ?? ""}
+                      onChange={(e) =>
+                        applyFiltersAndReset({
+                          cityOverride: e.target.value || undefined,
+                        })
+                      }
+                    >
+                      <option value="">Todas</option>
+                      {availableCities.map((city) => (
+                        <option key={city} value={city}>
+                          {city}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-sm font-semibold text-emerald-700">
+                    Zona (selecciona para filtrar)
+                    <select
+                      className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      value={zoneFilter ?? ""}
+                      onChange={(e) =>
+                        applyFiltersAndReset({
+                          zoneOverride: e.target.value || undefined,
+                        })
+                      }
+                    >
+                      <option value="">Todas</option>
+                      {availableZones.map((zone) => (
+                        <option key={zone} value={zone}>
+                          {zone}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
 
                 {extensionists.length > 0 ? (
                   <div className="overflow-hidden rounded-xl border border-emerald-100 shadow-sm">
@@ -839,11 +958,11 @@ export const AdminExplorerView = () => {
                         </strong>{" "}
                         -{" "}
                         <strong className="text-emerald-900">
-                          {Math.min(currentPageSafe * pageSize, extensionists.length)}
+                          {Math.min(currentPageSafe * pageSize, filteredExtensionists.length)}
                         </strong>{" "}
                         de{" "}
                         <strong className="text-emerald-900">
-                          {extensionists.length}
+                          {filteredExtensionists.length}
                         </strong>
                       </span>
                       <div className="flex items-center gap-2">
@@ -928,14 +1047,23 @@ export const AdminExplorerView = () => {
                           className="rounded-xl border border-emerald-100 bg-white shadow-sm"
                           key={property.id}
                         >
-                          <button
+                          <div
                             className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                             onClick={() =>
                               setExpandedPropertyId(
                                 isExpanded ? null : property.id,
                               )
                             }
-                            type="button"
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setExpandedPropertyId(
+                                  isExpanded ? null : property.id,
+                                );
+                              }
+                            }}
                           >
                             <div>
                               <p className="text-base font-semibold text-emerald-900">
@@ -948,31 +1076,34 @@ export const AdminExplorerView = () => {
                             </div>
                             <div className="flex items-center gap-2">
                               <button
-                              className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
-                              type="button"
-                              onClick={() => {
-                                setSelectedProperty(property);
-                                setSelectedVisit(1);
-                                setVisitDecision(null);
-                                setShowClassificationDetail(false);
-                                setEditableVisit(null);
-                                setEditableProducer(null);
-                                setEditableProperty(null);
-                                setApprovalProfile("");
-                                setExpandedPropertyId(property.id);
-                              }}
-                            >
-                              Encuestas
-                            </button>
-                            <span
-                              className={`rounded-full border border-emerald-200 p-2 text-emerald-600 transition ${
-                                isExpanded ? "bg-emerald-50 rotate-90" : ""
-                              }`}
-                            >
-                              <FiChevronRight aria-hidden />
-                            </span>
+                                className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedProperty(property);
+                                  setSelectedVisit(1);
+                                  setVisitDecision(null);
+                                  setShowClassificationDetail(false);
+                                  setEditableVisit(null);
+                                  setEditableProducer(null);
+                                  setEditableProperty(null);
+                                  setApprovalProfile("");
+                                  setDecisionReason("");
+                                  setDecisionError(null);
+                                  setExpandedPropertyId(property.id);
+                                }}
+                              >
+                                Encuestas
+                              </button>
+                              <span
+                                className={`rounded-full border border-emerald-200 p-2 text-emerald-600 transition ${
+                                  isExpanded ? "bg-emerald-50 rotate-90" : ""
+                                }`}
+                              >
+                                <FiChevronRight aria-hidden />
+                              </span>
                             </div>
-                          </button>
+                          </div>
 
                           {isExpanded ? (
                             <div className="grid gap-3 border-t border-emerald-100 px-4 py-3 md:grid-cols-3">
@@ -1031,16 +1162,18 @@ export const AdminExplorerView = () => {
                                   onClick={() => {
                                     setSelectedProperty(property);
                                     setSelectedVisit(1);
-                                    setVisitDecision(null);
-                                    setShowClassificationDetail(false);
-                                    setEditableVisit(null);
-                                    setEditableProducer(null);
-                                    setEditableProperty(null);
-                                    setApprovalProfile("");
-                                  }}
-                                >
-                                  Ver encuestas
-                                </button>
+                                  setVisitDecision(null);
+                                  setShowClassificationDetail(false);
+                                  setEditableVisit(null);
+                                  setEditableProducer(null);
+                                  setEditableProperty(null);
+                                  setApprovalProfile("");
+                                  setDecisionReason("");
+                                  setDecisionError(null);
+                                }}
+                              >
+                                Ver encuestas
+                              </button>
                               </div>
                             </div>
                           ) : null}
@@ -1160,8 +1293,8 @@ export const AdminExplorerView = () => {
                           <button
                             className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                             type="button"
-                            onClick={() => setVisitDecision("accepted")}
-                            disabled={!approvalProfile.trim()}
+                            onClick={() => handleDecisionSubmit("accepted")}
+                            disabled={!approvalProfile.trim() || decisionLoading || !visitDetail?.id}
                             title={
                               approvalProfile.trim()
                                 ? "Marcar como aceptado"
@@ -1174,7 +1307,8 @@ export const AdminExplorerView = () => {
                           <button
                             className="inline-flex items-center gap-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:border-red-200"
                             type="button"
-                            onClick={() => setVisitDecision("rejected")}
+                            onClick={() => handleDecisionSubmit("rejected")}
+                            disabled={!approvalProfile.trim() || decisionLoading || !visitDetail?.id}
                           >
                             <FiX aria-hidden />
                             Rechazar
@@ -1222,6 +1356,21 @@ export const AdminExplorerView = () => {
                               highlight
                             />
                           </div>
+                          <div className="w-full max-w-md">
+                            <FieldInput
+                              label="Motivo (opcional)"
+                              value={decisionReason}
+                              onChange={(v) => setDecisionReason(v)}
+                              placeholder="Ej: Documentos verificados"
+                              type="textarea"
+                            />
+                          </div>
+                          {decisionError ? (
+                            <p className="text-sm font-semibold text-red-600">{decisionError}</p>
+                          ) : null}
+                          {decisionLoading ? (
+                            <p className="text-xs text-emerald-600">Actualizando estado…</p>
+                          ) : null}
                         </div>
 
                         {surveyVisitLoading || surveyVisitFetching ? (

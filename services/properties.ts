@@ -102,6 +102,24 @@ export interface SurveyDetailResponse {
   status?: string;
 }
 
+export type SurveyStateValue = "accepted" | "rejected" | "pending";
+
+export interface UpdateSurveyStateInput {
+  surveyTypeId: number;
+  surveyId: number;
+  state: SurveyStateValue;
+  stateReason?: string;
+  perfil: string;
+  token?: string;
+  tokenType?: string;
+}
+
+export interface UpdateSurveyStateResponse {
+  success?: boolean;
+  message?: string;
+  data?: SurveyDetail;
+}
+
 export interface PropertySurveyVisit {
   id?: number;
   extensionist_id?: number;
@@ -255,6 +273,28 @@ export const downloadSurveyPdf = async (
     },
   );
   return response.data;
+};
+
+export const updateSurveyState = async ({
+  surveyTypeId,
+  surveyId,
+  state,
+  stateReason,
+  perfil,
+  token,
+  tokenType = "Token",
+}: UpdateSurveyStateInput): Promise<UpdateSurveyStateResponse> => {
+  const { data } = await httpClient.post<UpdateSurveyStateResponse>(
+    `/admin/surveys/${surveyTypeId}/${surveyId}/state/?perfil=${encodeURIComponent(perfil)}`,
+    {
+      state,
+      state_reason: stateReason,
+    },
+    {
+      headers: authHeaders(token, tokenType),
+    },
+  );
+  return data;
 };
 
 export const fetchPropertySurveyVisit = async (

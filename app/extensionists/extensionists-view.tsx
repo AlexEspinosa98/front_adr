@@ -17,6 +17,7 @@ type FilterFormState = {
   email: string;
   phone: string;
   city: string;
+  zone: string;
 };
 
 type SessionWithToken = Session & { accessToken?: string };
@@ -27,6 +28,7 @@ const INITIAL_FORM_STATE: FilterFormState = {
   email: "",
   phone: "",
   city: "",
+  zone: "",
 };
 
 const FILTER_LABELS: Record<keyof ExtensionistFilters, string> = {
@@ -35,6 +37,7 @@ const FILTER_LABELS: Record<keyof ExtensionistFilters, string> = {
   identification: "Documento",
   phone: "Teléfono",
   city: "Ciudad",
+  zone: "Zona",
 };
 
 const sanitizeFormFilters = (filters: FilterFormState): ExtensionistFilters => {
@@ -102,14 +105,14 @@ export const ExtensionistsView = () => {
     queryClient.invalidateQueries({ queryKey: ["extensionists"] });
   };
 
-  const activeFiltersDescription = useMemo(() => {
-    if (Object.keys(appliedFilters).length === 0) {
-      return "Mostrando todos los extensionistas";
-    }
-    return `Filtros activos: ${Object.entries(appliedFilters)
-      .map(([key, value]) => `${FILTER_LABELS[key as keyof ExtensionistFilters]}: ${value}`)
-      .join(", ")}`;
-  }, [appliedFilters]);
+const activeFiltersDescription = useMemo(() => {
+  if (Object.keys(appliedFilters).length === 0) {
+    return "Mostrando todos los extensionistas";
+  }
+  return `Filtros activos: ${Object.entries(appliedFilters)
+    .map(([key, value]) => `${FILTER_LABELS[key as keyof ExtensionistFilters]}: ${value}`)
+    .join(", ")}`;
+}, [appliedFilters]);
 
   return (
     <div className="w-full max-w-6xl space-y-6">
@@ -183,6 +186,17 @@ export const ExtensionistsView = () => {
               onChange={handleChange}
               placeholder="Ej. Santa Marta"
               value={formFilters.city}
+            />
+          </label>
+
+          <label className="text-sm font-medium text-emerald-700">
+            Zona
+            <input
+              className="mt-1 w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+              name="zone"
+              onChange={handleChange}
+              placeholder="Ej. Urbana"
+              value={formFilters.zone}
             />
           </label>
 
