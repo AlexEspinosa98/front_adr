@@ -33,13 +33,26 @@ async function proxyRequest(request: NextRequest, path: string) {
     }
 
     const response = await fetch(targetUrl, fetchOptions);
+    const contentType = response.headers.get("Content-Type") || "";
+    const isBinary =
+      /octet-stream|excel|spreadsheetml|application\/vnd/.test(contentType);
+
+    if (isBinary) {
+      const buffer = await response.arrayBuffer();
+      return new NextResponse(buffer, {
+        status: response.status,
+        headers: {
+          "Content-Type": contentType || "application/octet-stream",
+          "Content-Disposition": response.headers.get("Content-Disposition") || "",
+        },
+      });
+    }
 
     const data = await response.text();
-
     return new NextResponse(data, {
       status: response.status,
       headers: {
-        "Content-Type": response.headers.get("Content-Type") || "application/json",
+        "Content-Type": contentType || "application/json",
       },
     });
   } catch (error) {

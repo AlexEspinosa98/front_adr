@@ -34,7 +34,7 @@ type RawPropertySurvey = {
 };
 
 interface ExtensionistPropertiesApiResponse {
-  data: RawExtensionistProperty[] | { properties?: RawExtensionistProperty[] };
+  data: RawExtensionistProperty[] | { properties?: RawExtensionistProperty[]; surveys_state_summary?: SurveysStateSummary };
   message?: string;
   status?: string;
   success?: boolean;
@@ -61,12 +61,15 @@ export interface ExtensionistProperty {
   latitude?: string;
   longitude?: string;
   createdAt?: string;
+  surveysStateSummary?: SurveysStateSummary;
+  surveySummary?: Record<string, unknown>;
 }
 
 export interface ExtensionistPropertiesResponse {
   data: ExtensionistProperty[];
   message: string;
   status?: string;
+  summary?: SurveysStateSummary;
 }
 
 export interface PropertySurvey {
@@ -102,6 +105,20 @@ export interface SurveyDetailResponse {
   status?: string;
 }
 
+export interface SurveysStateSummaryBucket {
+  pending?: number;
+  accepted?: number;
+  rejected?: number;
+}
+
+export interface SurveysStateSummary {
+  survey_1?: SurveysStateSummaryBucket;
+  survey_2?: SurveysStateSummaryBucket;
+  survey_3?: SurveysStateSummaryBucket;
+  total?: SurveysStateSummaryBucket;
+  totals?: SurveysStateSummaryBucket;
+}
+
 export type SurveyStateValue = "accepted" | "rejected" | "pending";
 
 export interface UpdateSurveyStateInput {
@@ -112,9 +129,33 @@ export interface UpdateSurveyStateInput {
   perfil: string;
   token?: string;
   tokenType?: string;
+  csrfToken?: string;
 }
 
 export interface UpdateSurveyStateResponse {
+  success?: boolean;
+  message?: string;
+  data?: SurveyDetail;
+}
+
+export interface BasicUpdateSurveyInput {
+  surveyTypeId: number;
+  surveyId: number;
+  surveyData?: Record<string, unknown>;
+  producterData?: Record<string, unknown>;
+  propertyData?: Record<string, unknown>;
+  files?: {
+    photo_user?: File;
+    photo_interaction?: File;
+    photo_panorama?: File;
+    phono_extra_1?: File;
+    file_pdf?: File;
+  };
+  token?: string;
+  tokenType?: string;
+}
+
+export interface BasicUpdateSurveyResponse {
   success?: boolean;
   message?: string;
   data?: SurveyDetail;
@@ -189,10 +230,12 @@ export const fetchExtensionistProperties = async (
     : Array.isArray((data.data as { properties?: RawExtensionistProperty[] })?.properties)
       ? ((data.data as { properties?: RawExtensionistProperty[] }).properties as RawExtensionistProperty[])
       : [];
+  const summary = (data.data as any)?.surveys_state_summary;
 
   return {
     message: data.message ?? "",
     status: data.status,
+    summary,
     data: rawList.map((property) => ({
       id: property.id ?? property.property_id ?? 0,
       name:
@@ -211,6 +254,8 @@ export const fetchExtensionistProperties = async (
       latitude: (property as any).latitude,
       longitude: (property as any).longitude,
       createdAt: (property as any).created_at,
+      surveysStateSummary: (property as any).surveys_state_summary,
+      surveySummary: (property as any).survey_summary,
     })),
   };
 };
@@ -275,6 +320,59 @@ export const downloadSurveyPdf = async (
   return response.data;
 };
 
+export const basicUpdateSurvey = async ({
+  surveyTypeId,
+  surveyId,
+  surveyData,
+  producterData,
+  propertyData,
+  files,
+  token,
+  tokenType = "Token",
+}: BasicUpdateSurveyInput): Promise<BasicUpdateSurveyResponse> => {
+  const hasFiles = files && Object.values(files).some(Boolean);
+
+  if (hasFiles) {
+    const formData = new FormData();
+    if (surveyData) {
+      formData.append("survey_data", JSON.stringify(surveyData));
+    }
+    if (producterData) {
+      formData.append("producter_data", JSON.stringify(producterData));
+    }
+    if (propertyData) {
+      formData.append("property_data", JSON.stringify(propertyData));
+    }
+    Object.entries(files ?? {}).forEach(([key, value]) => {
+      if (value) {
+        formData.append(key, value as File);
+      }
+    });
+
+    const { data } = await httpClient.post<BasicUpdateSurveyResponse>(
+      `/admin/surveys/${surveyTypeId}/${surveyId}/basic-update`,
+      formData,
+      {
+        headers: authHeaders(token, tokenType),
+      },
+    );
+    return data;
+  }
+
+  const { data } = await httpClient.post<BasicUpdateSurveyResponse>(
+    `/admin/surveys/${surveyTypeId}/${surveyId}/basic-update`,
+    {
+      survey_data: surveyData,
+      producter_data: producterData,
+      property_data: propertyData,
+    },
+    {
+      headers: authHeaders(token, tokenType),
+    },
+  );
+  return data;
+};
+
 export const updateSurveyState = async ({
   surveyTypeId,
   surveyId,
@@ -283,15 +381,23 @@ export const updateSurveyState = async ({
   perfil,
   token,
   tokenType = "Token",
+  csrfToken,
 }: UpdateSurveyStateInput): Promise<UpdateSurveyStateResponse> => {
+  const url = `/admin/surveys/${surveyTypeId}/${surveyId}/state/`;
   const { data } = await httpClient.post<UpdateSurveyStateResponse>(
-    `/admin/surveys/${surveyTypeId}/${surveyId}/state/?perfil=${encodeURIComponent(perfil)}`,
+    url,
     {
       state,
       state_reason: stateReason,
     },
     {
-      headers: authHeaders(token, tokenType),
+      params: { perfil },
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...authHeaders(token, tokenType),
+        ...(csrfToken ? { "X-CSRFTOKEN": csrfToken } : {}),
+      },
     },
   );
   return data;

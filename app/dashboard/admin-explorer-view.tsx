@@ -36,12 +36,18 @@ import {
   ExtensionistProperty,
   fetchPropertySurveyVisit,
   fetchExtensionistProperties,
+  SurveysStateSummaryBucket,
   updateSurveyState,
+  basicUpdateSurvey,
 } from "@/services/properties";
-import { fetchSurveyStatistics } from "@/services/statistics";
-import { ExtensionistChart } from "./charts/ExtensionistChart";
+import {
+  fetchSurveyStatistics,
+  fetchSurveySummaryByCity,
+  type CitySurveySummary,
+  type SummarySurveyBucket,
+  exportSurveyExcel,
+} from "@/services/statistics";
 import { CityChart } from "./charts/CityChart";
-import { ProductiveLineChart } from "./charts/ProductiveLineChart";
 
 type SessionWithToken = Session & { accessToken?: string; tokenType?: string };
 
@@ -192,6 +198,43 @@ const MUNICIPALITIES: Record<(typeof DEPARTMENTS)[number], string[]> = {
   ],
 };
 
+const SUMMARY_DEPARTMENTS = ["Magdalena", "Atlántico"] as const;
+const SUMMARY_CITIES: Record<(typeof SUMMARY_DEPARTMENTS)[number], string[]> = {
+  Magdalena: [
+    "Cerro San Antonio",
+    "Chivolo",
+    "Ciénaga",
+    "Concordia",
+    "El Banco",
+    "El Piñon",
+    "Fundacion",
+    "Guamal",
+    "Nueva Granada",
+    "Pedraza",
+    "Pivijay",
+    "Plato",
+    "Sabana de San Angel",
+    "Salamina",
+    "San Zenón",
+    "Santa Marta",
+    "Tenerife",
+    "Zapayan",
+    "Zona Bananera",
+  ],
+  "Atlántico": [
+    "Baranoa",
+    "Malambo",
+    "Manatí",
+    "Palmar De Varela",
+    "Sabanalarga",
+    "Santa Lucía",
+    "Suan",
+    "Luruaco",
+    "Ponedera",
+    "Tubará",
+  ],
+};
+
 export const AdminExplorerView = () => {
   const { data: session } = useSession();
   const accessToken = (session as SessionWithToken | null)?.accessToken;
@@ -223,6 +266,25 @@ export const AdminExplorerView = () => {
   const [approvalProfile, setApprovalProfile] = useState("");
   const [decisionReason, setDecisionReason] = useState("");
   const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateFiles, setUpdateFiles] = useState<{
+    photo_user?: File;
+    photo_interaction?: File;
+    photo_panorama?: File;
+    phono_extra_1?: File;
+    file_pdf?: File;
+  }>({});
+  const [summaryDepartment, setSummaryDepartment] =
+    useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
+  const [summaryCity, setSummaryCity] = useState<string | undefined>(
+    SUMMARY_CITIES["Magdalena"][0],
+  );
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportDepartment, setExportDepartment] =
+    useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
+  const [exportCity, setExportCity] = useState<string | undefined>(undefined);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"stats" | "visits">("stats");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
@@ -261,6 +323,9 @@ export const AdminExplorerView = () => {
     setApprovalProfile("");
     setDecisionReason("");
     setDecisionError(null);
+    setUpdateMessage(null);
+    setUpdateError(null);
+    setUpdateFiles({});
     setExpandedPropertyId(null);
     setPropertySearch("");
     setPropertyPage(1);
@@ -292,6 +357,13 @@ export const AdminExplorerView = () => {
   const availableZones = Array.from(
     new Set(extensionists.map((item) => item.zone).filter(Boolean) as string[]),
   );
+  const summaryCityOptions = SUMMARY_CITIES[summaryDepartment] ?? [];
+  const selectedSummaryCity =
+    summaryCityOptions.find((city) => city === summaryCity) ??
+    summaryCityOptions[0] ??
+    "";
+  const exportCityOptions = SUMMARY_CITIES[exportDepartment] ?? [];
+  const selectedExportCity = exportCity ?? "";
   const filteredExtensionists = extensionists.filter((ext) => {
     const matchesCity = cityFilter ? ext.city === cityFilter : true;
     const matchesZone = zoneFilter ? ext.zone === zoneFilter : true;
@@ -352,6 +424,23 @@ export const AdminExplorerView = () => {
     enabled: Boolean(selectedProperty && selectedVisit && accessToken),
   });
 
+  const {
+    data: citySummaryResponse,
+    isLoading: citySummaryLoading,
+    isError: citySummaryError,
+    error: citySummaryFetchError,
+    refetch: refetchCitySummary,
+  } = useQuery({
+    queryKey: ["survey-summary-city", summaryCity, accessToken, tokenType],
+    queryFn: () =>
+      fetchSurveySummaryByCity(summaryCity ?? "", accessToken, tokenType),
+    enabled: Boolean(summaryCity && accessToken),
+  });
+  const citySummary: CitySurveySummary | undefined = citySummaryResponse?.data;
+  const { mutateAsync: mutateExport, isPending: exportLoading } = useMutation({
+    mutationFn: exportSurveyExcel,
+  });
+
   const properties = propertiesResponse?.data ?? [];
   const filteredProperties = properties.filter((property) =>
     property.name.toLowerCase().includes(propertySearch.toLowerCase().trim()),
@@ -368,43 +457,55 @@ export const AdminExplorerView = () => {
   );
 
   const surveyStats = statsResponse?.data;
+  const totals = surveyStats?.total_visits;
+  const propertiesTotals = surveyStats?.properties;
+  const extensionistsUnique = surveyStats?.extensionists?.unique_total ?? 0;
   const statCards = [
     {
-      label: "Encuestas iniciales",
-      value: surveyStats?.surveys.total ?? 0,
-      hint: "Formularios base",
+      label: "Visita 1 (inicial)",
+      value: totals?.survey_1 ?? 0,
+      hint: "",
       icon: <FiBarChart2 aria-hidden />,
     },
     {
-      label: "Extensionistas únicos",
-      value: surveyStats?.surveys.unique_extensionists ?? 0,
-      hint: "Cobertura inicial",
-      icon: <FiUsers aria-hidden />,
+      label: "Visita 2 (seguimiento)",
+      value: totals?.survey_2 ?? 0,
+      hint: "",
+      icon: <FiPieChart aria-hidden />,
     },
     {
-      label: "Productores únicos",
-      value: surveyStats?.surveys.unique_producers ?? 0,
-      hint: "Participantes distintos",
+      label: "Visita 3 (final)",
+      value: totals?.survey_3 ?? 0,
+      hint: "",
+      icon: <FiActivity aria-hidden />,
+    },
+    {
+      label: "Total de visitas",
+      value: totals?.all_types ?? 0,
+      hint: "",
       icon: <FiHome aria-hidden />,
     },
     {
-      label: "Predios únicos",
-      value: surveyStats?.surveys.unique_properties ?? 0,
-      hint: "Propiedades atendidas",
-      icon: <FiMapPin aria-hidden />,
+      label: "Extensionistas únicos",
+      value: extensionistsUnique,
+      hint: "",
+      icon: <FiUsers aria-hidden />,
     },
     {
-      label: "Total de todos los tipos",
-      value: surveyStats?.totals.total_all_types ?? 0,
-      hint: "Incluye seguimiento y finales",
-      icon: <FiPieChart aria-hidden />,
+      label: "Propiedades Mag/Atl",
+      value:
+        (propertiesTotals?.total_magdalena_atlantico ??
+          ((propertiesTotals?.magdalena ?? 0) + (propertiesTotals?.atlantico ?? 0))) ?? 0,
+      hint: "",
+      icon: <FiMapPin aria-hidden />,
     },
   ];
-  const topExtensionists =
-    surveyStats?.surveys.top_extensionists?.slice(0, 5) ?? [];
-  const topCities = surveyStats?.surveys.cities?.counts.slice(0, 5) ?? [];
-  const topPrimaryLines =
-    surveyStats?.surveys.primary_productive_lines?.slice(0, 5) ?? [];
+  const departmentRows = surveyStats?.by_department ?? [];
+  const topCities =
+    surveyStats?.by_city
+      ?.sort((a, b) => (b.total ?? 0) - (a.total ?? 0))
+      ?.slice(0, 8)
+      ?.map((item) => ({ value: item.city, count: item.total })) ?? [];
 
   const handleLogout = () => {
     window.localStorage.removeItem("access_token");
@@ -424,6 +525,9 @@ export const AdminExplorerView = () => {
     setApprovalProfile("");
     setDecisionReason("");
     setDecisionError(null);
+    setUpdateMessage(null);
+    setUpdateError(null);
+    setUpdateFiles({});
     setPropertySearch("");
     setPropertyPage(1);
   };
@@ -484,6 +588,56 @@ export const AdminExplorerView = () => {
       .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
       .join(" ")
       .replace("Ict", "ICT");
+  const getVisitCount = (extensionist: Extensionist, key: "survey_1" | "survey_2" | "survey_3") => {
+    const bucket = extensionist.surveys_state_summary?.[key];
+    const pending = bucket?.pending ?? 0;
+    const accepted = bucket?.accepted ?? 0;
+    const rejected = bucket?.rejected ?? 0;
+    return pending + accepted + rejected;
+  };
+  const renderVisitStates = (
+    extensionist: Extensionist,
+    key: "survey_1" | "survey_2" | "survey_3",
+  ) => {
+    const bucket = extensionist.surveys_state_summary?.[key] ?? {};
+    const pending = bucket.pending ?? 0;
+    const accepted = bucket.accepted ?? 0;
+    const rejected = bucket.rejected ?? 0;
+    return (
+      <div className="flex flex-wrap gap-1">
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+          P: {pending}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
+          A: {accepted}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+          R: {rejected}
+        </span>
+      </div>
+    );
+  };
+
+  const renderPropertyVisitStates = (
+    summary?: SurveysStateSummaryBucket,
+  ) => {
+    const pending = summary?.pending ?? 0;
+    const accepted = summary?.accepted ?? 0;
+    const rejected = summary?.rejected ?? 0;
+    return (
+      <div className="flex flex-wrap gap-1">
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+          P: {pending}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800">
+          A: {accepted}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-700">
+          R: {rejected}
+        </span>
+      </div>
+    );
+  };
 
   const StatCard = ({
     label,
@@ -551,6 +705,9 @@ export const AdminExplorerView = () => {
       setEditableVisit(null);
       setApprovalProfile("");
     }
+    setUpdateMessage(null);
+    setUpdateError(null);
+    setUpdateFiles({});
   }, [visitDetail]);
 
   useEffect(() => {
@@ -565,16 +722,125 @@ export const AdminExplorerView = () => {
     );
   }, [visitPropertyData]);
 
+  const clearUpdateFeedback = () => {
+    setUpdateMessage(null);
+    setUpdateError(null);
+  };
+
   const updateVisitField = (key: string, value: string) => {
+    clearUpdateFeedback();
     setEditableVisit((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
   const updateProducerField = (key: string, value: string) => {
+    clearUpdateFeedback();
     setEditableProducer((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
   const updatePropertyField = (key: string, value: string) => {
+    clearUpdateFeedback();
     setEditableProperty((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const cleanPayload = (data?: Record<string, unknown> | null) => {
+    if (!data) return undefined;
+    const output: Record<string, unknown> = {};
+    Object.entries(data).forEach(([key, value]) => {
+      if (value === undefined) return;
+      if (typeof value === "string" && value.trim() === "") {
+        output[key] = null;
+        return;
+      }
+      output[key] = value;
+    });
+    return Object.keys(output).length > 0 ? output : undefined;
+  };
+
+  const buildSurveyPayload = () => {
+    if (!editableVisit) return undefined;
+    const source = editableVisit as Record<string, unknown>;
+    const allowedKeys = [
+      "objetive_accompaniment",
+      "initial_diagnosis",
+      "recommendations_commitments",
+      "observations_visited",
+      "compliance_status",
+      "visit_date",
+      "date_acompanamiento",
+      "hour_acompanamiento",
+      "date_hour_end",
+      "origen_register",
+      "name_acompanamiento",
+      "attended_by",
+      "attendee_role",
+      "state",
+      "photo_user",
+      "photo_interaction",
+      "photo_panorama",
+      "phono_extra_1",
+      "file_pdf",
+    ];
+    const payload: Record<string, unknown> = {};
+    allowedKeys.forEach((key) => {
+      if (key in source) {
+        payload[key] = source[key];
+      }
+    });
+    return cleanPayload(payload);
+  };
+
+  const buildProducerPayload = () => {
+    if (!editableProducer) return undefined;
+    const source = editableProducer as Record<string, unknown>;
+    const payload: Record<string, unknown> = {};
+    ["name", "type_id", "identification", "number_phone"].forEach((key) => {
+      if (key in source) {
+        payload[key] = source[key];
+      }
+    });
+    return cleanPayload(payload);
+  };
+
+  const buildPropertyPayload = () => {
+    if (!editableProperty) return undefined;
+    const source = editableProperty as Record<string, unknown>;
+    const mapping: Record<string, string[]> = {
+      name: ["name"],
+      latitude: ["latitude"],
+      longitude: ["longitude"],
+      asnm: ["asnm"],
+      state: ["state"],
+      city: ["city", "municipality"],
+      municipality: ["municipality", "city"],
+      village: ["village"],
+      linea_productive_primary: ["linea_productive_primary", "primaryLine"],
+      linea_productive_secondary: ["linea_productive_secondary", "secondaryLine"],
+      area_in_production: ["area_in_production", "areaInProduction"],
+    };
+    const payload: Record<string, unknown> = {};
+    Object.entries(mapping).forEach(([target, candidates]) => {
+      const value = candidates
+        .map((key) => source[key])
+        .find(
+          (item) =>
+            item !== undefined &&
+            item !== null &&
+            !(typeof item === "string" && item.trim() === ""),
+        );
+      if (value !== undefined) {
+        payload[target] = value;
+      }
+    });
+    return cleanPayload(payload);
+  };
+
+  const handleFileChange = (
+    key: keyof typeof updateFiles,
+    files: FileList | null,
+  ) => {
+    clearUpdateFeedback();
+    const file = files?.[0];
+    setUpdateFiles((prev) => ({ ...prev, [key]: file || undefined }));
   };
   const selectedDepartment = (editableProperty as any)?.state as
     | (typeof DEPARTMENTS)[number]
@@ -583,6 +849,9 @@ export const AdminExplorerView = () => {
     MUNICIPALITIES[selectedDepartment ?? "Magdalena"] ?? [];
   const { mutateAsync: mutateSurveyState, isPending: decisionLoading } = useMutation({
     mutationFn: updateSurveyState,
+  });
+  const { mutateAsync: mutateBasicUpdate, isPending: updatingVisit } = useMutation({
+    mutationFn: basicUpdateSurvey,
   });
 
   const handleDecisionSubmit = async (state: "accepted" | "rejected") => {
@@ -616,6 +885,92 @@ export const AdminExplorerView = () => {
         error?.message ??
         "No fue posible actualizar el estado.";
       setDecisionError(message);
+    }
+  };
+
+  const handleBasicUpdate = async () => {
+    if (!selectedVisit || !visitDetail?.id) {
+      setUpdateError("Selecciona una visita antes de guardar cambios.");
+      return;
+    }
+    if (!accessToken) {
+      setUpdateError("No hay sesión válida para actualizar.");
+      return;
+    }
+    const surveyPayload = buildSurveyPayload();
+    const producerPayload = buildProducerPayload();
+    const propertyPayload = buildPropertyPayload();
+    const hasFiles = Object.values(updateFiles).some(Boolean);
+    if (!surveyPayload && !producerPayload && !propertyPayload && !hasFiles) {
+      setUpdateError("No hay cambios para enviar.");
+      return;
+    }
+    setUpdateError(null);
+    setUpdateMessage(null);
+    try {
+      const response = await mutateBasicUpdate({
+        surveyTypeId: selectedVisit,
+        surveyId: visitDetail.id,
+        surveyData: surveyPayload,
+        producterData: producerPayload,
+        propertyData: propertyPayload,
+        files: updateFiles,
+        token: accessToken,
+        tokenType,
+      });
+      if (response?.data) {
+        setEditableVisit(response.data as Record<string, unknown>);
+      }
+      if (producerPayload) {
+        setEditableProducer((prev) =>
+          prev ? { ...prev, ...producerPayload } : prev,
+        );
+      }
+      if (propertyPayload) {
+        setEditableProperty((prev) =>
+          prev ? { ...prev, ...propertyPayload } : prev,
+        );
+      }
+      setUpdateFiles({});
+      setUpdateMessage("Encuesta actualizada correctamente (sin clasificación).");
+      await refetchSurveyVisit();
+    } catch (error: any) {
+      const message =
+        (error?.response?.data as any)?.message ??
+        error?.message ??
+        "No fue posible actualizar la encuesta.";
+      setUpdateError(message);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!accessToken) {
+      setExportError("No hay sesión válida.");
+      return;
+    }
+    setExportError(null);
+    try {
+      const blob = await mutateExport({
+        state: exportDepartment,
+        city: exportCity || undefined,
+        token: accessToken,
+        tokenType,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "resumen_encuestas.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setExportModalOpen(false);
+    } catch (error: any) {
+      const message =
+        (error?.response?.data as any)?.message ??
+        error?.message ??
+        "No fue posible descargar el Excel.";
+      setExportError(message);
     }
   };
   return (
@@ -704,6 +1059,17 @@ export const AdminExplorerView = () => {
                 title="Resumen estadístico"
                 description="Visión rápida de las encuestas y su cobertura."
               />
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300"
+                  onClick={() => setExportModalOpen(true)}
+                  disabled={!accessToken}
+                >
+                  <FiFileText aria-hidden />
+                  Exportar Excel
+                </button>
+              </div>
 
               {statsLoading ? (
                 <p className="text-sm text-emerald-500">Cargando estadísticas…</p>
@@ -719,31 +1085,141 @@ export const AdminExplorerView = () => {
                     ))}
                   </div>
 
+                  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-emerald-900">
+                      Resumen general
+                    </p>
+                    <p className="text-xs text-emerald-500">
+                      Totales de visitas y propiedades
+                    </p>
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                        <thead className="bg-emerald-50/80 text-emerald-600">
+                          <tr className="text-left">
+                            <th className="px-3 py-2 font-semibold">Concepto</th>
+                            <th className="px-3 py-2 font-semibold">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-emerald-50">
+                          <tr>
+                            <td className="px-3 py-2 text-emerald-900">Visita 1</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-900">
+                              {totals?.survey_1 ?? 0}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2 text-emerald-900">Visita 2</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-900">
+                              {totals?.survey_2 ?? 0}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2 text-emerald-900">Visita 3</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-900">
+                              {totals?.survey_3 ?? 0}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2 text-emerald-900">Total visitas</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-900">
+                              {totals?.all_types ?? 0}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2 text-emerald-900">Propiedades Magdalena</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-900">
+                              {propertiesTotals?.magdalena ?? 0}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2 text-emerald-900">Propiedades Atlántico</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-900">
+                              {propertiesTotals?.atlantico ?? 0}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2 text-emerald-900">Total Mag + Atl</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-900">
+                              {propertiesTotals?.total_magdalena_atlantico ??
+                                (propertiesTotals?.magdalena ?? 0) +
+                                  (propertiesTotals?.atlantico ?? 0)}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2 text-emerald-900">Extensionistas únicos</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-900">
+                              {extensionistsUnique}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
                   <div className="grid gap-4 lg:grid-cols-3">
                     <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
                       <p className="text-sm font-semibold text-emerald-900">
-                        Top extensionistas
+                        Visitas por departamento
                       </p>
                       <p className="text-xs text-emerald-500">
-                        Más encuestas realizadas
+                        Totales de visitas 1, 2 y 3 por departamento
                       </p>
-                      <div className="mt-3">
-                        {topExtensionists.length > 0 ? (
-                          <ExtensionistChart data={topExtensionists} />
-                        ) : (
-                          <p className="text-sm text-emerald-500">
-                            Sin registros de extensionistas.
-                          </p>
-                        )}
-                      </div>
+                      {departmentRows.length > 0 ? (
+                        <div className="mt-3 overflow-x-auto">
+                          <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                            <thead className="bg-emerald-50/80">
+                              <tr className="text-left text-emerald-600">
+                                <th className="px-3 py-2 font-semibold">Departamento</th>
+                                <th className="px-3 py-2 font-semibold">Visita 1</th>
+                                <th className="px-3 py-2 font-semibold">Visita 2</th>
+                                <th className="px-3 py-2 font-semibold">Visita 3</th>
+                                <th className="px-3 py-2 font-semibold">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-emerald-50">
+                              {departmentRows.map((row) => (
+                                <tr key={row.state}>
+                                  <td className="px-3 py-2 font-semibold text-emerald-900">
+                                    {row.state}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                      {row.survey_1}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                      {row.survey_2}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                      {row.survey_3}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <span className="rounded-full bg-emerald-900 px-2 py-1 text-xs font-semibold text-white">
+                                      {row.total}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-emerald-500">
+                          Sin registros de departamentos.
+                        </p>
+                      )}
                     </div>
 
                     <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
                       <p className="text-sm font-semibold text-emerald-900">
-                        Ciudades con más encuestas
+                        Ciudades con más visitas
                       </p>
                       <p className="text-xs text-emerald-500">
-                        Top 5 por volumen de registros
+                        Top ciudades por total de visitas
                       </p>
                       <div className="mt-3">
                         {topCities.length > 0 ? (
@@ -755,24 +1231,270 @@ export const AdminExplorerView = () => {
                         )}
                       </div>
                     </div>
+                  </div>
 
-                    <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
-                      <p className="text-sm font-semibold text-emerald-900">
-                        Líneas productivas principales
-                      </p>
-                      <p className="text-xs text-emerald-500">
-                        Declaradas como actividad primaria
-                      </p>
-                      <div className="mt-3">
-                        {topPrimaryLines.length > 0 ? (
-                          <ProductiveLineChart data={topPrimaryLines} />
-                        ) : (
-                          <p className="text-sm text-emerald-500">
-                            Sin registros de líneas productivas.
-                          </p>
-                        )}
+                  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-900">
+                          Resumen por ciudad
+                        </p>
+                        <p className="text-xs text-emerald-500">
+                          Selecciona departamento y ciudad para ver visitas y estados.
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2 md:flex-row">
+                        <label className="text-sm font-semibold text-emerald-700">
+                          Departamento
+                          <select
+                            className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            value={summaryDepartment}
+                            onChange={(e) => {
+                              const dept = e.target.value as (typeof SUMMARY_DEPARTMENTS)[number];
+                              setSummaryDepartment(dept);
+                              const nextCity = SUMMARY_CITIES[dept]?.[0] ?? "";
+                              setSummaryCity(nextCity);
+                            }}
+                          >
+                            {SUMMARY_DEPARTMENTS.map((dept) => (
+                              <option key={dept} value={dept}>
+                                {dept}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-sm font-semibold text-emerald-700">
+                          Ciudad
+                          <select
+                            className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            value={selectedSummaryCity}
+                            onChange={(e) => {
+                              setSummaryCity(e.target.value);
+                            }}
+                          >
+                            {summaryCityOptions.map((city) => (
+                              <option key={city} value={city}>
+                                {city}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       </div>
                     </div>
+
+                    {citySummaryLoading ? (
+                      <p className="mt-3 text-sm text-emerald-500">
+                        Cargando resumen de ciudad…
+                      </p>
+                    ) : citySummaryError ? (
+                      <p className="mt-3 text-sm text-red-600">
+                        {citySummaryFetchError?.message ??
+                          "No fue posible cargar el resumen de la ciudad."}
+                      </p>
+                    ) : citySummary ? (
+                      <div className="mt-4 space-y-4">
+                        <div className="grid gap-3 md:grid-cols-4">
+                          <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
+                            <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                              Ciudad seleccionada
+                            </p>
+                            <p className="text-lg font-semibold text-emerald-900">
+                              {selectedSummaryCity || "N/D"}
+                            </p>
+                            <p className="text-xs text-emerald-500">
+                              Departamento: {summaryDepartment}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
+                            <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                              Predios
+                            </p>
+                            <p className="text-lg font-semibold text-emerald-900">
+                              {citySummary.properties_count ?? 0}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
+                            <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                              Total visitas
+                            </p>
+                            <p className="text-lg font-semibold text-emerald-900">
+                              {(citySummary.summary?.survey_1?.count ?? 0) +
+                                (citySummary.summary?.survey_2?.count ?? 0) +
+                                (citySummary.summary?.survey_3?.count ?? 0)}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
+                            <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                              Última creación
+                            </p>
+                            <p className="text-sm font-semibold text-emerald-900">
+                              {[
+                                citySummary.summary?.survey_1?.latest_created_at,
+                                citySummary.summary?.survey_2?.latest_created_at,
+                                citySummary.summary?.survey_3?.latest_created_at,
+                              ]
+                                .filter(Boolean)
+                                .map((date) => formatDate(date as string))
+                                .join(" · ") || "N/D"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
+                          <p className="text-sm font-semibold text-emerald-900">
+                            Resumen por tipo de visita
+                          </p>
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                              <thead className="bg-emerald-50/80 text-emerald-600">
+                                <tr className="text-left">
+                                  <th className="px-3 py-2 font-semibold">Tipo</th>
+                                  <th className="px-3 py-2 font-semibold">Cantidad</th>
+                                  <th className="px-3 py-2 font-semibold">Última fecha</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-emerald-50">
+                                {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
+                                  const label = `Visita ${idx + 1}`;
+                                  const summary = citySummary.summary?.[key];
+                                  return (
+                                    <tr key={key}>
+                                      <td className="px-3 py-2 text-emerald-900">{label}</td>
+                                      <td className="px-3 py-2 font-semibold text-emerald-900">
+                                        {summary?.count ?? 0}
+                                      </td>
+                                      <td className="px-3 py-2 text-emerald-700">
+                                        {summary?.latest_created_at
+                                          ? formatDate(summary.latest_created_at)
+                                          : "N/D"}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
+                          <p className="text-sm font-semibold text-emerald-900">
+                            Estados por tipo
+                          </p>
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                              <thead className="bg-emerald-50/80 text-emerald-600">
+                                <tr className="text-left">
+                                  <th className="px-3 py-2 font-semibold">Tipo</th>
+                                  <th className="px-3 py-2 font-semibold">Pending</th>
+                                  <th className="px-3 py-2 font-semibold">Accepted</th>
+                                  <th className="px-3 py-2 font-semibold">Rejected</th>
+                                </tr>
+                              </thead>
+                                <tbody className="divide-y divide-emerald-50">
+                                  {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
+                                    const label = `Visita ${idx + 1}`;
+                                    const stateCountsRaw = citySummary.states_summary?.[key];
+                                    const stateCounts = Array.isArray(stateCountsRaw)
+                                      ? stateCountsRaw.reduce<Record<string, number>>(
+                                          (acc, item: any) => {
+                                            if (item?.value) {
+                                              acc[item.value] = item.count ?? 0;
+                                            }
+                                            return acc;
+                                          },
+                                          {},
+                                        )
+                                      : (stateCountsRaw as Record<string, number>) ?? {};
+                                    return (
+                                      <tr key={key}>
+                                        <td className="px-3 py-2 text-emerald-900">{label}</td>
+                                      {["pending", "accepted", "rejected"].map((state) => (
+                                        <td key={state} className="px-3 py-2">
+                                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                            {stateCounts[state] ?? 0}
+                                          </span>
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
+                          <p className="text-sm font-semibold text-emerald-900">
+                            Predios en la ciudad
+                          </p>
+                          <p className="text-xs text-emerald-500">
+                            Conteos por predio y tipo de visita.
+                          </p>
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                              <thead className="bg-emerald-50/80 text-emerald-600">
+                                <tr className="text-left">
+                                  <th className="px-3 py-2 font-semibold">Predio</th>
+                                  <th className="px-3 py-2 font-semibold">Visita 1</th>
+                                  <th className="px-3 py-2 font-semibold">Visita 2</th>
+                                  <th className="px-3 py-2 font-semibold">Visita 3</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-emerald-50">
+                                {citySummary.properties?.map((prop) => (
+                                  <tr key={`${prop.property?.id ?? prop.property?.name ?? Math.random()}`}>
+                                    <td className="px-3 py-2">
+                                      <div className="flex flex-col">
+                                        <span className="font-semibold text-emerald-900">
+                                          {prop.property?.name ?? "Predio sin nombre"}
+                                        </span>
+                                        <span className="text-xs text-emerald-500">
+                                          {prop.property?.city ?? "Ciudad N/D"} ·{" "}
+                                          {prop.property?.state ?? "Depto N/D"}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
+                                      const bucket = (prop as any)[key] as SummarySurveyBucket | undefined;
+                                      return (
+                                        <td key={key} className="px-3 py-2">
+                                          <div className="space-y-1 rounded-lg border border-emerald-100 bg-emerald-50/70 p-2">
+                                            <p className="text-xs font-semibold text-emerald-900">
+                                              Visita {idx + 1}: {bucket?.count ?? 0}
+                                            </p>
+                                            {bucket?.latest_created_at ? (
+                                              <p className="text-[11px] text-emerald-700">
+                                                Última: {formatDate(bucket.latest_created_at)}
+                                              </p>
+                                            ) : null}
+                                            {bucket?.states ? (
+                                              <div className="flex flex-wrap gap-1 text-[11px] text-emerald-800">
+                                                {Object.entries(bucket.states).map(([state, count]) => (
+                                                  <span
+                                                    key={state}
+                                                    className="rounded-full bg-white px-2 py-1 font-semibold"
+                                                  >
+                                                    {state}: {count}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-emerald-500">
+                        Selecciona una ciudad para ver el resumen.
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
@@ -835,6 +1557,9 @@ export const AdminExplorerView = () => {
                         setApprovalProfile("");
                         setDecisionReason("");
                         setDecisionError(null);
+                        setUpdateMessage(null);
+                        setUpdateError(null);
+                        setUpdateFiles({});
                         setCurrentPage(1);
                         refetchExtensionists();
                       }}
@@ -896,6 +1621,9 @@ export const AdminExplorerView = () => {
                             <th className="px-4 pb-3 pt-2 font-medium">Correo</th>
                             <th className="px-4 pb-3 pt-2 font-medium">Teléfono</th>
                             <th className="px-4 pb-3 pt-2 font-medium">Ciudad</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Visita 1</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Visita 2</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Visita 3</th>
                             <th className="px-4 pb-3 pt-2 font-medium">Registrado</th>
                             <th className="px-4 pb-3 pt-2 font-medium"></th>
                           </tr>
@@ -923,6 +1651,15 @@ export const AdminExplorerView = () => {
                                 </td>
                                 <td className="px-4 py-3 text-emerald-600">
                                   {extensionist.city ?? "—"}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-700">
+                                  {renderVisitStates(extensionist, "survey_1")}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-700">
+                                  {renderVisitStates(extensionist, "survey_2")}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-700">
+                                  {renderVisitStates(extensionist, "survey_3")}
                                 </td>
                                 <td className="px-4 py-3 text-emerald-600">
                                   {registeredAt}
@@ -1015,6 +1752,53 @@ export const AdminExplorerView = () => {
                   </p>
                 ) : properties.length > 0 ? (
                   <>
+                    {propertiesResponse?.summary ? (
+                      <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                        <p className="text-sm font-semibold text-emerald-900">
+                          Resumen de visitas en propiedades
+                        </p>
+                        <p className="text-xs text-emerald-500">
+                          Pendientes (P), aceptadas (A) y rechazadas (R) por tipo de visita.
+                        </p>
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          {(["survey_1", "survey_2", "survey_3"] as const).map(
+                            (key, idx) => {
+                              const bucket = propertiesResponse.summary?.[key];
+                              return (
+                                <div
+                                  key={key}
+                                  className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3"
+                                >
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                    Visita {idx + 1}
+                                  </p>
+                                  <div className="mt-2 flex items-center justify-between">
+                                    <span className="text-sm font-semibold text-emerald-900">
+                                      Total:{" "}
+                                      {(bucket?.pending ?? 0) +
+                                        (bucket?.accepted ?? 0) +
+                                        (bucket?.rejected ?? 0)}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                                    <span className="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-800">
+                                      P: {bucket?.pending ?? 0}
+                                    </span>
+                                    <span className="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-800">
+                                      A: {bucket?.accepted ?? 0}
+                                    </span>
+                                    <span className="rounded-full bg-red-100 px-2 py-1 font-semibold text-red-700">
+                                      R: {bucket?.rejected ?? 0}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            },
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <input
                         className="w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 md:max-w-sm"
@@ -1075,11 +1859,33 @@ export const AdminExplorerView = () => {
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
+                              <div className="flex flex-col gap-1 text-right">
+                                <p className="text-[11px] font-semibold text-emerald-700">
+                                  Visitas
+                                </p>
+                                <div className="flex gap-1">
+                                  {(["survey_1", "survey_2", "survey_3"] as const).map(
+                                    (key, idx) => (
+                                      <div
+                                        key={key}
+                                        className="rounded-md bg-white px-2 py-1 text-[11px] shadow-sm ring-1 ring-emerald-100"
+                                      >
+                                        <p className="font-semibold text-emerald-900">
+                                          V{idx + 1}
+                                        </p>
+                                        {renderPropertyVisitStates(
+                                          property.surveysStateSummary?.[key],
+                                        )}
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              </div>
                               <button
-                                className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
+                              className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
                                   setSelectedProperty(property);
                                   setSelectedVisit(1);
                                   setVisitDecision(null);
@@ -1090,6 +1896,9 @@ export const AdminExplorerView = () => {
                                   setApprovalProfile("");
                                   setDecisionReason("");
                                   setDecisionError(null);
+                                  setUpdateMessage(null);
+                                  setUpdateError(null);
+                                  setUpdateFiles({});
                                   setExpandedPropertyId(property.id);
                                 }}
                               >
@@ -1170,6 +1979,9 @@ export const AdminExplorerView = () => {
                                   setApprovalProfile("");
                                   setDecisionReason("");
                                   setDecisionError(null);
+                                  setUpdateMessage(null);
+                                  setUpdateError(null);
+                                  setUpdateFiles({});
                                 }}
                               >
                                 Ver encuestas
@@ -1274,6 +2086,9 @@ export const AdminExplorerView = () => {
                                 setEditableProducer(null);
                                 setEditableProperty(null);
                                 setApprovalProfile("");
+                                setUpdateMessage(null);
+                                setUpdateError(null);
+                                setUpdateFiles({});
                               }}
                             >
                               Visita {num}
@@ -1290,6 +2105,15 @@ export const AdminExplorerView = () => {
                     ) : (
                       <div className="space-y-4">
                         <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            type="button"
+                            onClick={handleBasicUpdate}
+                            disabled={updatingVisit || !visitDetail?.id}
+                          >
+                            <FiFileText aria-hidden />
+                            {updatingVisit ? "Guardando..." : "Guardar cambios"}
+                          </button>
                           <button
                             className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                             type="button"
@@ -1339,12 +2163,22 @@ export const AdminExplorerView = () => {
                               className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
                                 visitDecision === "accepted"
                                   ? "bg-emerald-100 text-emerald-800"
-                                  : "bg-red-100 text-red-700"
-                              }`}
-                            >
-                              {visitDecision === "accepted"
-                                ? "Marcado como aceptado (solo UI)"
-                                : "Marcado como rechazado (solo UI)"}
+                              : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {visitDecision === "accepted"
+                              ? "Marcado como aceptado (solo UI)"
+                              : "Marcado como rechazado (solo UI)"}
+                          </span>
+                        ) : null}
+                          {updateMessage ? (
+                            <span className="rounded-md bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+                              {updateMessage}
+                            </span>
+                          ) : null}
+                          {updateError ? (
+                            <span className="text-sm font-semibold text-red-600">
+                              {updateError}
                             </span>
                           ) : null}
                           <div className="w-full max-w-xs">
@@ -1726,6 +2560,88 @@ export const AdminExplorerView = () => {
                                     )}
                                   </div>
                                 )}
+                                <div className="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                                  <label className="text-sm font-semibold text-emerald-700">
+                                    Subir nueva foto del productor (opcional)
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                      onChange={(e) =>
+                                        handleFileChange("photo_user", e.target.files)
+                                      }
+                                    />
+                                    {updateFiles.photo_user ? (
+                                      <span className="text-xs text-emerald-600">
+                                        Listo: {updateFiles.photo_user.name}
+                                      </span>
+                                    ) : null}
+                                  </label>
+                                  <label className="text-sm font-semibold text-emerald-700">
+                                    Subir nueva foto de interacción (opcional)
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                      onChange={(e) =>
+                                        handleFileChange("photo_interaction", e.target.files)
+                                      }
+                                    />
+                                    {updateFiles.photo_interaction ? (
+                                      <span className="text-xs text-emerald-600">
+                                        Listo: {updateFiles.photo_interaction.name}
+                                      </span>
+                                    ) : null}
+                                  </label>
+                                  <label className="text-sm font-semibold text-emerald-700">
+                                    Subir panorama (opcional)
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                      onChange={(e) =>
+                                        handleFileChange("photo_panorama", e.target.files)
+                                      }
+                                    />
+                                    {updateFiles.photo_panorama ? (
+                                      <span className="text-xs text-emerald-600">
+                                        Listo: {updateFiles.photo_panorama.name}
+                                      </span>
+                                    ) : null}
+                                  </label>
+                                  <label className="text-sm font-semibold text-emerald-700">
+                                    Subir foto adicional (opcional)
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                      onChange={(e) =>
+                                        handleFileChange("phono_extra_1", e.target.files)
+                                      }
+                                    />
+                                    {updateFiles.phono_extra_1 ? (
+                                      <span className="text-xs text-emerald-600">
+                                        Listo: {updateFiles.phono_extra_1.name}
+                                      </span>
+                                    ) : null}
+                                  </label>
+                                  <label className="text-sm font-semibold text-emerald-700">
+                                    Subir PDF (opcional)
+                                    <input
+                                      type="file"
+                                      accept="application/pdf"
+                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                      onChange={(e) =>
+                                        handleFileChange("file_pdf", e.target.files)
+                                      }
+                                    />
+                                    {updateFiles.file_pdf ? (
+                                      <span className="text-xs text-emerald-600">
+                                        Listo: {updateFiles.file_pdf.name}
+                                      </span>
+                                    ) : null}
+                                  </label>
+                                </div>
                               </div>
                             </SectionCard>
 
@@ -1883,6 +2799,89 @@ export const AdminExplorerView = () => {
           )}
         </div>
       </main>
+      {exportModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">
+                  Exportar Excel de encuestas
+                </p>
+                <p className="text-xs text-emerald-500">
+                  Selecciona departamento y ciudad (opcional) para filtrar el archivo.
+                </p>
+              </div>
+              <button
+                className="rounded-md p-1 text-emerald-700 transition hover:bg-emerald-50"
+                type="button"
+                onClick={() => setExportModalOpen(false)}
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-sm font-semibold text-emerald-700">
+                Departamento
+                <select
+                  className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  value={exportDepartment}
+                  onChange={(e) => {
+                    const dept = e.target.value as (typeof SUMMARY_DEPARTMENTS)[number];
+                    setExportDepartment(dept);
+                    setExportCity(undefined);
+                  }}
+                >
+                  {SUMMARY_DEPARTMENTS.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm font-semibold text-emerald-700">
+                Ciudad (opcional)
+                <select
+                  className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  value={selectedExportCity}
+                  onChange={(e) => setExportCity(e.target.value || undefined)}
+                >
+                  <option value="">(Sin filtro)</option>
+                  {exportCityOptions.map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {exportError ? (
+              <p className="mt-3 text-sm font-semibold text-red-600">{exportError}</p>
+            ) : null}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                type="button"
+                onClick={() => setExportModalOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-md bg-emerald-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={handleExport}
+                disabled={exportLoading}
+              >
+                {exportLoading ? "Descargando..." : "Descargar Excel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

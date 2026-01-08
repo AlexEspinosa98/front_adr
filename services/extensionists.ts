@@ -12,6 +12,28 @@ export interface Extensionist {
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
+  surveys_state_summary?: {
+    survey_1?: {
+      pending?: number;
+      accepted?: number;
+      rejected?: number;
+    };
+    survey_2?: {
+      pending?: number;
+      accepted?: number;
+      rejected?: number;
+    };
+    survey_3?: {
+      pending?: number;
+      accepted?: number;
+      rejected?: number;
+    };
+    total?: {
+      pending?: number;
+      accepted?: number;
+      rejected?: number;
+    };
+  };
 }
 
 export interface ExtensionistsResponse {
