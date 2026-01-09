@@ -3,9 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE_URL =
   process.env.API_BASE_URL ?? "https://adr.ricardopupo.co/api/v1";
 
-async function proxyRequest(request: NextRequest, path: string) {
-  const url = new URL(request.url);
-  const targetUrl = `${API_BASE_URL}/${path}${url.search}`;
+async function proxyRequest(request: NextRequest, originalPath: string) {
+  const targetPath = originalPath.startsWith("/")
+    ? originalPath
+    : `/${originalPath}`;
+  const targetUrl = `${API_BASE_URL}${targetPath}${request.nextUrl.search}`;
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -69,7 +71,10 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  return proxyRequest(request, path.join("/"));
+  const originalPath =
+    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
+    `/${path.join("/")}`;
+  return proxyRequest(request, originalPath);
 }
 
 export async function POST(
@@ -77,7 +82,10 @@ export async function POST(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  return proxyRequest(request, path.join("/"));
+  const originalPath =
+    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
+    `/${path.join("/")}`;
+  return proxyRequest(request, originalPath);
 }
 
 export async function PUT(
@@ -85,7 +93,10 @@ export async function PUT(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  return proxyRequest(request, path.join("/"));
+  const originalPath =
+    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
+    `/${path.join("/")}`;
+  return proxyRequest(request, originalPath);
 }
 
 export async function DELETE(
@@ -93,7 +104,10 @@ export async function DELETE(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  return proxyRequest(request, path.join("/"));
+  const originalPath =
+    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
+    `/${path.join("/")}`;
+  return proxyRequest(request, originalPath);
 }
 
 export async function PATCH(
@@ -101,5 +115,8 @@ export async function PATCH(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  return proxyRequest(request, path.join("/"));
+  const originalPath =
+    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
+    `/${path.join("/")}`;
+  return proxyRequest(request, originalPath);
 }

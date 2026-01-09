@@ -87,6 +87,65 @@ export interface PropertySurveysResponse {
   status?: string;
 }
 
+export type ExtensionistSummaryProperty = {
+  id: number;
+  name: string;
+  city?: string;
+  state?: string;
+  municipality?: string;
+  village?: string;
+  latitude?: string;
+  longitude?: string;
+  asnm?: string | number | null;
+  linea_productive_primary?: string;
+  linea_productive_secondary?: string;
+  area_in_production?: number | string | null;
+  surveys?: {
+    type_1?: {
+      count?: number;
+      states?: string[];
+      latest_visit?: string | null;
+      file_pdf?: string | null;
+    };
+    type_2?: {
+      count?: number;
+      states?: string[];
+      latest_visit?: string | null;
+      file_pdf?: string | null;
+    };
+    type_3?: {
+      count?: number;
+      states?: string[];
+      latest_visit?: string | null;
+      file_pdf?: string | null;
+    };
+  };
+};
+
+export interface ExtensionistSummaryResponse {
+  success?: boolean;
+  data?: {
+    extensionist?: Record<string, unknown>;
+    states_summary?: SurveysStateSummary;
+    properties?: ExtensionistSummaryProperty[];
+  };
+}
+
+export const exportExtensionistExcel = async (
+  extensionistId: number,
+  token?: string,
+  tokenType: string = "Token",
+) => {
+  const response = await httpClient.get<Blob>(
+    `/admin/extensionists/${extensionistId}/export-excel/`,
+    {
+      responseType: "blob",
+      headers: authHeaders(token, tokenType),
+    },
+  );
+  return response.data;
+};
+
 export interface SurveyDetail {
   id?: number;
   surveyTypeId?: number;
@@ -258,6 +317,20 @@ export const fetchExtensionistProperties = async (
       surveySummary: (property as any).survey_summary,
     })),
   };
+};
+
+export const fetchExtensionistSummary = async (
+  extensionistId: number,
+  token?: string,
+  tokenType: string = "Token",
+): Promise<ExtensionistSummaryResponse> => {
+  const { data } = await httpClient.get<ExtensionistSummaryResponse>(
+    `/admin/extensionists/${extensionistId}/summary/`,
+    {
+      headers: authHeaders(token, tokenType),
+    },
+  );
+  return data;
 };
 
 export const fetchPropertySurveys = async (

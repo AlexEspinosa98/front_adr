@@ -36,9 +36,12 @@ import {
   ExtensionistProperty,
   fetchPropertySurveyVisit,
   fetchExtensionistProperties,
+  fetchExtensionistSummary,
   SurveysStateSummaryBucket,
+  SurveysStateSummary,
   updateSurveyState,
   basicUpdateSurvey,
+  exportExtensionistExcel,
 } from "@/services/properties";
 import {
   fetchSurveyStatistics,
@@ -287,6 +290,13 @@ export const AdminExplorerView = () => {
     useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
   const [exportCity, setExportCity] = useState<string | undefined>(undefined);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [reportCityFilter, setReportCityFilter] = useState<string | undefined>(undefined);
+  const [reportZoneFilter, setReportZoneFilter] = useState<string | undefined>(undefined);
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportPage, setReportPage] = useState(1);
+  const [reportExpandedPropertyId, setReportExpandedPropertyId] = useState<number | null>(null);
+  const [reportExporting, setReportExporting] = useState(false);
+  const [reportExportError, setReportExportError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"stats" | "visits" | "reports">("stats");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
@@ -334,6 +344,7 @@ export const AdminExplorerView = () => {
     setUpdateError(null);
     setUpdateFiles({});
     setExpandedPropertyId(null);
+    setReportExpandedPropertyId(null);
     setPropertySearch("");
     setPropertyPage(1);
   };
@@ -364,6 +375,24 @@ export const AdminExplorerView = () => {
   const availableZones = Array.from(
     new Set(extensionists.map((item) => item.zone).filter(Boolean) as string[]),
   );
+  const filteredReportExtensionists = extensionists.filter((ext) => {
+    const matchesCity = reportCityFilter ? ext.city === reportCityFilter : true;
+    const matchesZone = reportZoneFilter ? ext.zone === reportZoneFilter : true;
+    const matchesName = reportSearch
+      ? ext.name.toLowerCase().includes(reportSearch.toLowerCase().trim())
+      : true;
+    return matchesCity && matchesZone && matchesName;
+  });
+  const reportPageSize = 10;
+  const reportTotalPages = Math.max(
+    1,
+    Math.ceil(filteredReportExtensionists.length / reportPageSize),
+  );
+  const reportCurrentPageSafe = Math.min(reportPage, reportTotalPages);
+  const paginatedReportExtensionists = filteredReportExtensionists.slice(
+    (reportCurrentPageSafe - 1) * reportPageSize,
+    reportCurrentPageSafe * reportPageSize,
+  );
   const visitTotalsByType = ["survey_1", "survey_2", "survey_3"].reduce<
     Record<"survey_1" | "survey_2" | "survey_3", { pending: number; accepted: number; rejected: number }>
   >(
@@ -373,7 +402,7 @@ export const AdminExplorerView = () => {
     },
     {} as any,
   );
-  extensionists.forEach((ext) => {
+  filteredReportExtensionists.forEach((ext) => {
     (["survey_1", "survey_2", "survey_3"] as const).forEach((key) => {
       const bucket = ext.surveys_state_summary?.[key];
       if (bucket) {
@@ -408,20 +437,20 @@ export const AdminExplorerView = () => {
   };
 
   const {
-    data: propertiesResponse,
+    data: extensionistSummaryResponse,
     isLoading: propertiesLoading,
     isError: propertiesError,
     error: propertiesFetchError,
     isFetching: propertiesFetching,
   } = useQuery({
     queryKey: [
-      "extensionist-properties-full",
+      "extensionist-summary",
       selectedExtensionist?.id,
       accessToken,
       tokenType,
     ],
     queryFn: () =>
-      fetchExtensionistProperties(selectedExtensionist!.id, accessToken, tokenType),
+      fetchExtensionistSummary(selectedExtensionist!.id, accessToken, tokenType),
     enabled: Boolean(selectedExtensionist && accessToken),
   });
 
@@ -467,7 +496,59 @@ export const AdminExplorerView = () => {
     mutationFn: exportSurveyExcel,
   });
 
-  const properties = propertiesResponse?.data ?? [];
+  const summaryData = extensionistSummaryResponse?.data;
+  const properties = (summaryData?.properties ?? []).map((prop) => {
+    const countStates = (states?: string[]) =>
+      (states ?? []).reduce(
+        (acc, state) => {
+          if (state === "pending") acc.pending += 1;
+          if (state === "accepted") acc.accepted += 1;
+          if (state === "rejected") acc.rejected += 1;
+          return acc;
+        },
+        { pending: 0, accepted: 0, rejected: 0 },
+      );
+    const bucket1 = countStates((prop as any)?.surveys?.type_1?.states);
+    const bucket2 = countStates((prop as any)?.surveys?.type_2?.states);
+    const bucket3 = countStates((prop as any)?.surveys?.type_3?.states);
+    return {
+      id: prop.id,
+      name: prop.name,
+      city: prop.city,
+      municipality: prop.municipality,
+      state: prop.state,
+      village: prop.village,
+      primaryLine: (prop as any).linea_productive_primary,
+      secondaryLine: (prop as any).linea_productive_secondary,
+      areaInProduction: (prop as any).area_in_production,
+      latitude: (prop as any).latitude,
+      longitude: (prop as any).longitude,
+      createdAt: (prop as any).created_at,
+      surveysStateSummary: {
+        survey_1: bucket1,
+        survey_2: bucket2,
+        survey_3: bucket3,
+      } as SurveysStateSummary,
+    } as ExtensionistProperty;
+  });
+  const basePropertiesSummary: SurveysStateSummary = {
+    survey_1: { pending: 0, accepted: 0, rejected: 0 },
+    survey_2: { pending: 0, accepted: 0, rejected: 0 },
+    survey_3: { pending: 0, accepted: 0, rejected: 0 },
+  };
+  const propertiesSummary =
+    summaryData?.states_summary ??
+    properties.reduce<SurveysStateSummary>((acc, prop) => {
+      (["survey_1", "survey_2", "survey_3"] as const).forEach((key) => {
+        const bucket = prop.surveysStateSummary?.[key];
+        acc[key] = {
+          pending: (acc[key]?.pending ?? 0) + (bucket?.pending ?? 0),
+          accepted: (acc[key]?.accepted ?? 0) + (bucket?.accepted ?? 0),
+          rejected: (acc[key]?.rejected ?? 0) + (bucket?.rejected ?? 0),
+        };
+      });
+      return acc;
+    }, basePropertiesSummary);
   const filteredProperties = properties.filter((property) =>
     property.name.toLowerCase().includes(propertySearch.toLowerCase().trim()),
   );
@@ -553,6 +634,7 @@ export const AdminExplorerView = () => {
   const handleExtensionistSelect = (extensionist: Extensionist) => {
     setSelectedExtensionist(extensionist);
     setExpandedPropertyId(null);
+    setReportExpandedPropertyId(null);
     setSelectedProperty(null);
     setSelectedVisit(null);
     setVisitDecision(null);
@@ -1579,13 +1661,89 @@ export const AdminExplorerView = () => {
                 title="Reporte de extensionista"
                 description="Resumen de visitas P/A/R por extensionista."
               />
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-xs font-semibold text-emerald-800">
+                <span className="rounded-full bg-amber-100 px-2 py-1">P = Pendiente</span>
+                <span className="rounded-full bg-emerald-100 px-2 py-1">A = Aceptada</span>
+                <span className="rounded-full bg-red-100 px-2 py-1">R = Rechazada</span>
+              </div>
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className="grid flex-1 gap-3 md:grid-cols-2">
+                  <label className="text-sm font-semibold text-emerald-700">
+                    Ciudad (reporte)
+                    <select
+                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      value={reportCityFilter ?? ""}
+                      onChange={(e) => {
+                        setReportCityFilter(e.target.value || undefined);
+                        setReportPage(1);
+                      }}
+                    >
+                      <option value="">Todas</option>
+                      {availableCities.map((city) => (
+                        <option key={city} value={city}>
+                          {city}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm font-semibold text-emerald-700">
+                    Zona (reporte)
+                    <select
+                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      value={reportZoneFilter ?? ""}
+                      onChange={(e) => {
+                        setReportZoneFilter(e.target.value || undefined);
+                        setReportPage(1);
+                      }}
+                    >
+                      <option value="">Todas</option>
+                      {availableZones.map((zone) => (
+                        <option key={zone} value={zone}>
+                          {zone}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="flex flex-1 flex-col gap-2 md:max-w-sm">
+                  <label className="text-sm font-semibold text-emerald-700">
+                    Buscar por nombre
+                    <input
+                      className="mt-1 w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      placeholder="Nombre del extensionista"
+                      value={reportSearch}
+                      onChange={(e) => {
+                        setReportSearch(e.target.value);
+                        setReportPage(1);
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-emerald-600">
+                <button
+                  type="button"
+                  className="rounded-md border border-emerald-200 px-3 py-1 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                  onClick={() => {
+                    setReportCityFilter(undefined);
+                    setReportZoneFilter(undefined);
+                    setReportSearch("");
+                    setReportPage(1);
+                  }}
+                >
+                  Limpiar filtros de reporte
+                </button>
+                <span>
+                  Mostrando {filteredReportExtensionists.length} de {extensionists.length} extensionistas
+                </span>
+              </div>
               <div className="grid gap-3 md:grid-cols-4">
                 <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
                   <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
                     Extensionistas
                   </p>
                   <p className="text-2xl font-semibold text-emerald-900">
-                    {extensionists.length}
+                    {filteredReportExtensionists.length}
                   </p>
                 </div>
                 {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
@@ -1619,60 +1777,282 @@ export const AdminExplorerView = () => {
                 })}
               </div>
 
-              {extensionists.length > 0 ? (
-                <div className="overflow-hidden rounded-xl border border-emerald-100 shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-emerald-100 text-sm">
-                      <thead className="bg-emerald-50/80">
-                        <tr className="text-left text-emerald-500">
-                          <th className="px-4 pb-3 pt-2 font-medium">Nombre</th>
-                          <th className="px-4 pb-3 pt-2 font-medium">Correo</th>
-                          <th className="px-4 pb-3 pt-2 font-medium">Ciudad</th>
-                          <th className="px-4 pb-3 pt-2 font-medium">Zona</th>
-                          <th className="px-4 pb-3 pt-2 font-medium">Visita 1</th>
-                          <th className="px-4 pb-3 pt-2 font-medium">Visita 2</th>
-                          <th className="px-4 pb-3 pt-2 font-medium">Visita 3</th>
-                          <th className="px-4 pb-3 pt-2 font-medium">Registrado</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-emerald-100">
-                        {extensionists.map((ext) => {
-                          const registeredAt = ext.created_at
-                            ? new Date(ext.created_at).toLocaleDateString()
-                            : "N/D";
-                          return (
-                            <tr key={ext.id}>
-                              <td className="px-4 py-3 font-semibold text-emerald-900">
-                                {ext.name}
-                              </td>
-                              <td className="px-4 py-3 text-emerald-600">
-                                {ext.email ?? "—"}
-                              </td>
-                              <td className="px-4 py-3 text-emerald-600">
-                                {ext.city ?? "—"}
-                              </td>
-                              <td className="px-4 py-3 text-emerald-600">
-                                {ext.zone ?? "—"}
-                              </td>
-                              <td className="px-4 py-3 text-emerald-700">
-                                {renderVisitStates(ext, "survey_1")}
-                              </td>
-                              <td className="px-4 py-3 text-emerald-700">
-                                {renderVisitStates(ext, "survey_2")}
-                              </td>
-                              <td className="px-4 py-3 text-emerald-700">
-                                {renderVisitStates(ext, "survey_3")}
-                              </td>
-                              <td className="px-4 py-3 text-emerald-600">
-                                {registeredAt}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+              {filteredReportExtensionists.length > 0 ? (
+                <>
+                  <div className="overflow-hidden rounded-xl border border-emerald-100 shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                        <thead className="bg-emerald-50/80">
+                          <tr className="text-left text-emerald-500">
+                            <th className="px-4 pb-3 pt-2 font-medium">Nombre</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Correo</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Ciudad</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Zona</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Visita 1</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Visita 2</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Visita 3</th>
+                            <th className="px-4 pb-3 pt-2 font-medium">Registrado</th>
+                            <th className="px-4 pb-3 pt-2 font-medium"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-emerald-100">
+                          {paginatedReportExtensionists.map((ext) => {
+                            const registeredAt = ext.created_at
+                              ? new Date(ext.created_at).toLocaleDateString()
+                              : "N/D";
+                            return (
+                              <tr key={ext.id}>
+                                <td className="px-4 py-3 font-semibold text-emerald-900">
+                                  {ext.name}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-600">
+                                  {ext.email ?? "—"}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-600">
+                                  {ext.city ?? "—"}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-600">
+                                  {ext.zone ?? "—"}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-700">
+                                  {renderVisitStates(ext, "survey_1")}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-700">
+                                  {renderVisitStates(ext, "survey_2")}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-700">
+                                  {renderVisitStates(ext, "survey_3")}
+                                </td>
+                                <td className="px-4 py-3 text-emerald-600">
+                                  {registeredAt}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <button
+                                    className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                                    type="button"
+                                    onClick={() => handleExtensionistSelect(ext)}
+                                  >
+                                  Ver estadística
+                                    <FiChevronRight aria-hidden />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex flex-col gap-3 border-t border-emerald-100 px-4 py-3 text-sm text-emerald-600 md:flex-row md:items-center md:justify-between">
+                      <span>
+                        Mostrando{" "}
+                        <strong className="text-emerald-900">
+                          {(reportCurrentPageSafe - 1) * reportPageSize + 1}
+                        </strong>{" "}
+                        -{" "}
+                        <strong className="text-emerald-900">
+                          {Math.min(
+                            reportCurrentPageSafe * reportPageSize,
+                            filteredReportExtensionists.length,
+                          )}
+                        </strong>{" "}
+                        de{" "}
+                        <strong className="text-emerald-900">
+                          {filteredReportExtensionists.length}
+                        </strong>
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={reportCurrentPageSafe === 1}
+                          onClick={() =>
+                            setReportPage((prev) => Math.max(1, prev - 1))
+                          }
+                        >
+                          <FiChevronLeft aria-hidden />
+                          Anterior
+                        </button>
+                        <span className="text-xs text-emerald-600">
+                          Página {reportCurrentPageSafe} de {reportTotalPages}
+                        </span>
+                        <button
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={reportCurrentPageSafe === reportTotalPages}
+                          onClick={() =>
+                            setReportPage((prev) =>
+                              Math.min(reportTotalPages, prev + 1),
+                            )
+                          }
+                        >
+                          Siguiente
+                          <FiChevronRight aria-hidden />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                  {selectedExtensionist ? (
+                    <div className="mt-4 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-900">
+                            Propiedades de {selectedExtensionist.name}
+                          </p>
+                          <p className="text-xs text-emerald-500">
+                            Estados P/A/R por visita para el extensionista seleccionado.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {propertiesLoading || propertiesFetching ? (
+                            <p className="text-xs text-emerald-600">Cargando propiedades...</p>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900 disabled:opacity-60"
+                            disabled={reportExporting || !selectedExtensionist}
+                            onClick={async () => {
+                              if (!selectedExtensionist || !accessToken) return;
+                              setReportExportError(null);
+                              setReportExporting(true);
+                              try {
+                                const blob = await exportExtensionistExcel(
+                                  selectedExtensionist.id,
+                                  accessToken,
+                                  tokenType,
+                                );
+                                const url = window.URL.createObjectURL(blob);
+                                const link = document.createElement("a");
+                                link.href = url;
+                                link.download = `extensionista_${selectedExtensionist.id}.xlsx`;
+                                document.body.appendChild(link);
+                                link.click();
+                                link.remove();
+                                window.URL.revokeObjectURL(url);
+                              } catch (error: any) {
+                                const message =
+                                  (error?.response?.data as any)?.message ??
+                                  error?.message ??
+                                  "No fue posible descargar el Excel.";
+                                setReportExportError(message);
+                              } finally {
+                                setReportExporting(false);
+                              }
+                            }}
+                          >
+                            {reportExporting ? "Descargando..." : "Descargar Excel"}
+                          </button>
+                          {reportExportError ? (
+                            <span className="text-xs font-semibold text-red-600">
+                              {reportExportError}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                        {propertiesError ? (
+                          <p className="mt-2 text-sm text-red-600">
+                            {propertiesFetchError?.message ?? "No fue posible cargar las propiedades."}
+                          </p>
+                        ) : properties.length > 0 ? (
+                          <div className="mt-3 space-y-3">
+                            {properties.map((property) => {
+                              const isExpanded = reportExpandedPropertyId === property.id;
+                              return (
+                              <div
+                                key={property.id}
+                                className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3"
+                              >
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <p className="text-sm font-semibold text-emerald-900">
+                                      {property.name}
+                                    </p>
+                                    <p className="text-xs text-emerald-600">
+                                      {property.city ?? property.municipality ?? "Ciudad N/D"} ·{" "}
+                                      {property.state ?? "Depto N/D"}
+                                    </p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    {(["survey_1", "survey_2", "survey_3"] as const).map(
+                                      (key, idx) => (
+                                        <div
+                                          key={key}
+                                          className="rounded-md bg-white px-3 py-2 text-[11px] shadow-sm ring-1 ring-emerald-100"
+                                        >
+                                          <p className="font-semibold text-emerald-900">
+                                            Visita {idx + 1}
+                                          </p>
+                                          {renderPropertyVisitStates(
+                                            property.surveysStateSummary?.[key],
+                                          )}
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                                    onClick={() =>
+                                      setReportExpandedPropertyId(
+                                        isExpanded ? null : property.id,
+                                      )
+                                    }
+                                  >
+                                    {isExpanded ? "Ocultar detalle" : "Ver detalles"}
+                                    <FiChevronRight
+                                      className={isExpanded ? "rotate-90 transition" : "transition"}
+                                      aria-hidden
+                                    />
+                                  </button>
+                                </div>
+                                {isExpanded ? (
+                                  <div className="mt-3 grid gap-2 rounded-lg border border-emerald-100 bg-white p-3 text-sm text-emerald-800 md:grid-cols-2">
+                                    <p>
+                                      <span className="font-semibold">Línea primaria:</span>{" "}
+                                      {(property as any).primaryLine ?? (property as any).linea_productive_primary ?? "N/D"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold">Línea secundaria:</span>{" "}
+                                      {(property as any).secondaryLine ??
+                                        (property as any).linea_productive_secondary ??
+                                        "N/D"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold">Área en producción:</span>{" "}
+                                      {(property as any).areaInProduction ??
+                                        (property as any).area_in_production ??
+                                        "N/D"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold">Coordenadas:</span>{" "}
+                                      {(property as any).latitude ?? "N/D"},{" "}
+                                      {(property as any).longitude ?? "N/D"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold">ASNM:</span>{" "}
+                                      {(property as any).asnm ?? "N/D"}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold">Creada:</span>{" "}
+                                      {(property as any).createdAt
+                                        ? new Date((property as any).createdAt).toLocaleDateString()
+                                        : "N/D"}
+                                    </p>
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-emerald-500">
+                          Este extensionista no tiene propiedades asociadas.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 renderListState({
                   isLoading: extensionistsLoading,
@@ -1932,7 +2312,7 @@ export const AdminExplorerView = () => {
                   </p>
                 ) : properties.length > 0 ? (
                   <>
-                    {propertiesResponse?.summary ? (
+                    {propertiesSummary ? (
                       <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
                         <p className="text-sm font-semibold text-emerald-900">
                           Resumen de visitas en propiedades
@@ -1943,7 +2323,7 @@ export const AdminExplorerView = () => {
                         <div className="mt-3 grid gap-3 md:grid-cols-3">
                           {(["survey_1", "survey_2", "survey_3"] as const).map(
                             (key, idx) => {
-                              const bucket = propertiesResponse.summary?.[key];
+                              const bucket = propertiesSummary?.[key];
                               return (
                                 <div
                                   key={key}
