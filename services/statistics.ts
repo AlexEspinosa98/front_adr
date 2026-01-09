@@ -90,7 +90,15 @@ export interface ExportSurveyExcelParams {
 export const fetchSurveyStatistics = async (
   token?: string,
 ): Promise<SurveyStatisticsResponse> => {
-  const { data } = await httpClient.get<SurveyStatisticsResponse>(
+  const { data } = await httpClient.get<
+    SurveyStatisticsResponse & {
+      data: {
+        total_visits?: Record<string, any>;
+        by_department?: Array<Record<string, any>>;
+        by_city?: Array<Record<string, any>>;
+      };
+    }
+  >(
     "/admin/surveys/statistics",
     token
       ? {
@@ -100,7 +108,39 @@ export const fetchSurveyStatistics = async (
         }
       : undefined,
   );
-  return data;
+  const normalizeTotals = (totals: Record<string, any> | undefined): SurveyTotals => ({
+    survey_1: totals?.survey_1 ?? totals?.visita_1 ?? 0,
+    survey_2: totals?.survey_2 ?? totals?.visita_2 ?? 0,
+    survey_3: totals?.survey_3 ?? totals?.visita_3 ?? 0,
+    all_types: totals?.all_types ?? totals?.total ?? 0,
+  });
+
+  const normalizeDept = (item: Record<string, any>): DepartmentStat => ({
+    state: item.state ?? "",
+    survey_1: item.survey_1 ?? item.visita_1 ?? 0,
+    survey_2: item.survey_2 ?? item.visita_2 ?? 0,
+    survey_3: item.survey_3 ?? item.visita_3 ?? 0,
+    total: item.total ?? 0,
+  });
+
+  const normalizeCity = (item: Record<string, any>): CityStat => ({
+    city: item.city ?? "",
+    survey_1: item.survey_1 ?? item.visita_1 ?? 0,
+    survey_2: item.survey_2 ?? item.visita_2 ?? 0,
+    survey_3: item.survey_3 ?? item.visita_3 ?? 0,
+    total: item.total ?? 0,
+  });
+
+  return {
+    success: data.success,
+    data: {
+      total_visits: normalizeTotals(data.data?.total_visits),
+      by_department: (data.data?.by_department ?? []).map(normalizeDept),
+      by_city: (data.data?.by_city ?? []).map(normalizeCity),
+      properties: data.data?.properties ?? { magdalena: 0, atlantico: 0, total_magdalena_atlantico: 0 },
+      extensionists: data.data?.extensionists ?? { unique_total: 0 },
+    },
+  };
 };
 
 export const exportSurveyExcel = async ({

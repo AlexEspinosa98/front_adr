@@ -239,6 +239,8 @@ export const AdminExplorerView = () => {
   const { data: session } = useSession();
   const accessToken = (session as SessionWithToken | null)?.accessToken;
   const tokenType = (session as SessionWithToken | null)?.tokenType ?? "Token";
+  const userName = (session?.user?.name as string | undefined)?.trim() ?? "";
+  const isCoordinator = userName.toLowerCase() === "coordinador";
   const [nameInput, setNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [cityFilter, setCityFilter] = useState<string | undefined>(undefined);
@@ -285,19 +287,24 @@ export const AdminExplorerView = () => {
     useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
   const [exportCity, setExportCity] = useState<string | undefined>(undefined);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<"stats" | "visits">("stats");
+  const [activeView, setActiveView] = useState<"stats" | "visits" | "reports">("stats");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
     null,
   );
   const [propertySearch, setPropertySearch] = useState("");
   const [propertyPage, setPropertyPage] = useState(1);
-  const { data: statsResponse, isLoading: statsLoading, isError: statsError } =
-    useQuery({
-      queryKey: ["survey-statistics", accessToken],
-      queryFn: () => fetchSurveyStatistics(accessToken),
-      enabled: Boolean(accessToken),
-    });
+  const {
+    data: statsResponse,
+    isLoading: statsLoading,
+    isError: statsError,
+    isFetching: statsFetching,
+    refetch: refetchStats,
+  } = useQuery({
+    queryKey: ["survey-statistics", accessToken],
+    queryFn: () => fetchSurveyStatistics(accessToken),
+    enabled: Boolean(accessToken),
+  });
 
   const applyFiltersAndReset = ({
     cityOverride,
@@ -357,6 +364,25 @@ export const AdminExplorerView = () => {
   const availableZones = Array.from(
     new Set(extensionists.map((item) => item.zone).filter(Boolean) as string[]),
   );
+  const visitTotalsByType = ["survey_1", "survey_2", "survey_3"].reduce<
+    Record<"survey_1" | "survey_2" | "survey_3", { pending: number; accepted: number; rejected: number }>
+  >(
+    (acc, key) => {
+      acc[key as "survey_1" | "survey_2" | "survey_3"] = { pending: 0, accepted: 0, rejected: 0 };
+      return acc;
+    },
+    {} as any,
+  );
+  extensionists.forEach((ext) => {
+    (["survey_1", "survey_2", "survey_3"] as const).forEach((key) => {
+      const bucket = ext.surveys_state_summary?.[key];
+      if (bucket) {
+        visitTotalsByType[key].pending += bucket.pending ?? 0;
+        visitTotalsByType[key].accepted += bucket.accepted ?? 0;
+        visitTotalsByType[key].rejected += bucket.rejected ?? 0;
+      }
+    });
+  });
   const summaryCityOptions = SUMMARY_CITIES[summaryDepartment] ?? [];
   const selectedSummaryCity =
     summaryCityOptions.find((city) => city === summaryCity) ??
@@ -511,6 +537,18 @@ export const AdminExplorerView = () => {
     window.localStorage.removeItem("access_token");
     signOut({ callbackUrl: "/login" });
   };
+
+  useEffect(() => {
+    if (isCoordinator && activeView === "visits") {
+      setActiveView("stats");
+    }
+  }, [isCoordinator, activeView]);
+
+  useEffect(() => {
+    if (activeView === "stats" && accessToken) {
+      void refetchStats();
+    }
+  }, [activeView, accessToken, refetchStats]);
 
   const handleExtensionistSelect = (extensionist: Extensionist) => {
     setSelectedExtensionist(extensionist);
@@ -1000,22 +1038,41 @@ export const AdminExplorerView = () => {
             />
             Estadística
           </button>
+          {!isCoordinator ? (
+            <button
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
+                activeView === "visits"
+                  ? "bg-emerald-900 text-white"
+                  : "text-emerald-900 hover:bg-emerald-50"
+              }`}
+              onClick={() => setActiveView("visits")}
+              type="button"
+            >
+              <FiActivity
+                className={
+                  activeView === "visits" ? "text-white" : "text-emerald-500"
+                }
+                aria-hidden
+              />
+              Revisión de visitas
+            </button>
+          ) : null}
           <button
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
-              activeView === "visits"
+              activeView === "reports"
                 ? "bg-emerald-900 text-white"
                 : "text-emerald-900 hover:bg-emerald-50"
             }`}
-            onClick={() => setActiveView("visits")}
+            onClick={() => setActiveView("reports")}
             type="button"
           >
-            <FiActivity
+            <FiUsers
               className={
-                activeView === "visits" ? "text-white" : "text-emerald-500"
+                activeView === "reports" ? "text-white" : "text-emerald-500"
               }
               aria-hidden
             />
-            Revisión de visitas
+            Reporte de extensionista
           </button>
         </nav>
       </aside>
@@ -1031,12 +1088,16 @@ export const AdminExplorerView = () => {
                 <h1 className="mt-4 text-3xl font-semibold">
                   {activeView === "stats"
                     ? "Resumen estadístico de encuestas"
-                    : "Revisión de extensionistas"}
+                    : activeView === "visits"
+                      ? "Revisión de extensionistas"
+                      : "Reporte de extensionista"}
                 </h1>
                 <p className="mt-3 text-base text-emerald-200">
                   {activeView === "stats"
                     ? "Explora totales, cobertura y top extensionistas."
-                    : "Busca extensionistas registrados y revisa sus datos básicos."}
+                    : activeView === "visits"
+                      ? "Busca extensionistas registrados y revisa sus datos básicos."
+                      : "Consulta el resumen de extensionistas y sus visitas."}
                 </p>
               </div>
               <button
@@ -1060,6 +1121,14 @@ export const AdminExplorerView = () => {
                 description="Visión rápida de las encuestas y su cobertura."
               />
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300"
+                  onClick={() => refetchStats()}
+                  disabled={!accessToken || statsLoading || statsFetching}
+                >
+                  Actualizar
+                </button>
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300"
@@ -1501,6 +1570,117 @@ export const AdminExplorerView = () => {
                 <p className="text-sm text-emerald-500">
                   No hay datos estadísticos disponibles.
                 </p>
+              )}
+            </section>
+          ) : activeView === "reports" ? (
+            <section className={SECTION_CLASS}>
+              <SectionHeader
+                icon={<FiUsers aria-hidden />}
+                title="Reporte de extensionista"
+                description="Resumen de visitas P/A/R por extensionista."
+              />
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
+                  <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                    Extensionistas
+                  </p>
+                  <p className="text-2xl font-semibold text-emerald-900">
+                    {extensionists.length}
+                  </p>
+                </div>
+                {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
+                  const bucket = visitTotalsByType[key];
+                  const total =
+                    (bucket?.pending ?? 0) +
+                    (bucket?.accepted ?? 0) +
+                    (bucket?.rejected ?? 0);
+                  return (
+                    <div
+                      key={key}
+                      className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm"
+                    >
+                      <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                        Visita {idx + 1}
+                      </p>
+                      <p className="text-lg font-semibold text-emerald-900">{total}</p>
+                      <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                        <span className="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-800">
+                          P: {bucket?.pending ?? 0}
+                        </span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-800">
+                          A: {bucket?.accepted ?? 0}
+                        </span>
+                        <span className="rounded-full bg-red-100 px-2 py-1 font-semibold text-red-700">
+                          R: {bucket?.rejected ?? 0}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {extensionists.length > 0 ? (
+                <div className="overflow-hidden rounded-xl border border-emerald-100 shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                      <thead className="bg-emerald-50/80">
+                        <tr className="text-left text-emerald-500">
+                          <th className="px-4 pb-3 pt-2 font-medium">Nombre</th>
+                          <th className="px-4 pb-3 pt-2 font-medium">Correo</th>
+                          <th className="px-4 pb-3 pt-2 font-medium">Ciudad</th>
+                          <th className="px-4 pb-3 pt-2 font-medium">Zona</th>
+                          <th className="px-4 pb-3 pt-2 font-medium">Visita 1</th>
+                          <th className="px-4 pb-3 pt-2 font-medium">Visita 2</th>
+                          <th className="px-4 pb-3 pt-2 font-medium">Visita 3</th>
+                          <th className="px-4 pb-3 pt-2 font-medium">Registrado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-100">
+                        {extensionists.map((ext) => {
+                          const registeredAt = ext.created_at
+                            ? new Date(ext.created_at).toLocaleDateString()
+                            : "N/D";
+                          return (
+                            <tr key={ext.id}>
+                              <td className="px-4 py-3 font-semibold text-emerald-900">
+                                {ext.name}
+                              </td>
+                              <td className="px-4 py-3 text-emerald-600">
+                                {ext.email ?? "—"}
+                              </td>
+                              <td className="px-4 py-3 text-emerald-600">
+                                {ext.city ?? "—"}
+                              </td>
+                              <td className="px-4 py-3 text-emerald-600">
+                                {ext.zone ?? "—"}
+                              </td>
+                              <td className="px-4 py-3 text-emerald-700">
+                                {renderVisitStates(ext, "survey_1")}
+                              </td>
+                              <td className="px-4 py-3 text-emerald-700">
+                                {renderVisitStates(ext, "survey_2")}
+                              </td>
+                              <td className="px-4 py-3 text-emerald-700">
+                                {renderVisitStates(ext, "survey_3")}
+                              </td>
+                              <td className="px-4 py-3 text-emerald-600">
+                                {registeredAt}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                renderListState({
+                  isLoading: extensionistsLoading,
+                  isFetching: extensionistsFetching,
+                  isError: extensionistsError,
+                  errorMessage: extensionistsFetchError?.message,
+                  emptyLabel: "No hay extensionistas para mostrar.",
+                })
               )}
             </section>
           ) : (
