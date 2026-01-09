@@ -529,6 +529,7 @@ export const AdminExplorerView = () => {
         survey_2: bucket2,
         survey_3: bucket3,
       } as SurveysStateSummary,
+      surveySummary: (prop as any).surveys,
     } as ExtensionistProperty;
   });
   const basePropertiesSummary: SurveysStateSummary = {
@@ -1891,6 +1892,81 @@ export const AdminExplorerView = () => {
                       </div>
                     </div>
                   </div>
+                  {selectedExtensionist && summaryData?.extensionist ? (
+                    <div className="mt-4 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Datos del extensionista seleccionado
+                      </p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
+                          <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                            Nombre
+                          </p>
+                          <p className="text-sm font-semibold text-emerald-900">
+                            {(summaryData.extensionist as any)?.name ?? "N/D"}
+                          </p>
+                          <p className="text-xs text-emerald-500">
+                            {(summaryData.extensionist as any)?.identification ?? "N/D"}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
+                          <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                            Contacto
+                          </p>
+                          <p className="text-sm font-semibold text-emerald-900">
+                            {(summaryData.extensionist as any)?.email ?? "N/D"}
+                          </p>
+                          <p className="text-xs text-emerald-500">
+                            {(summaryData.extensionist as any)?.phone ?? "N/D"}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
+                          <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                            Ubicación
+                          </p>
+                          <p className="text-sm font-semibold text-emerald-900">
+                            {(summaryData.extensionist as any)?.city ?? "Ciudad N/D"}
+                          </p>
+                          <p className="text-xs text-emerald-500">
+                            Zona: {(summaryData.extensionist as any)?.zone ?? "N/D"}
+                          </p>
+                        </div>
+                      </div>
+                      {summaryData.states_summary ? (
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
+                            const bucket = (summaryData.states_summary as any)[key] ?? {};
+                            const total =
+                              (bucket.pending ?? 0) +
+                              (bucket.accepted ?? 0) +
+                              (bucket.rejected ?? 0);
+                            return (
+                              <div
+                                key={key}
+                                className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3"
+                              >
+                                <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                  Visita {idx + 1}
+                                </p>
+                                <p className="text-lg font-semibold text-emerald-900">{total}</p>
+                                <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                                  <span className="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-800">
+                                    P: {bucket.pending ?? 0}
+                                  </span>
+                                  <span className="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-800">
+                                    A: {bucket.accepted ?? 0}
+                                  </span>
+                                  <span className="rounded-full bg-red-100 px-2 py-1 font-semibold text-red-700">
+                                    R: {bucket.rejected ?? 0}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {selectedExtensionist ? (
                     <div className="mt-4 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -2039,6 +2115,47 @@ export const AdminExplorerView = () => {
                                         ? new Date((property as any).createdAt).toLocaleDateString()
                                         : "N/D"}
                                     </p>
+                                    <div className="md:col-span-2">
+                                      <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                        Visitas registradas
+                                      </p>
+                                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                                        {(["type_1", "type_2", "type_3"] as const).map((key, idx) => {
+                                          const visit = (property as any).surveySummary?.[key];
+                                          return (
+                                            <div
+                                              key={key}
+                                              className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 text-xs"
+                                            >
+                                              <p className="font-semibold text-emerald-900">
+                                                Visita {idx + 1}
+                                              </p>
+                                              <p className="text-emerald-700">
+                                                Cantidad: {visit?.count ?? 0}
+                                              </p>
+                                              <p className="text-emerald-700">
+                                                Última:{" "}
+                                                {visit?.latest_visit
+                                                  ? formatDate(visit.latest_visit as string)
+                                                  : "N/D"}
+                                              </p>
+                                              {visit?.file_pdf ? (
+                                                <a
+                                                  className="font-semibold text-emerald-700 hover:text-emerald-900"
+                                                  href={visit.file_pdf as string}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                >
+                                                  Ver PDF
+                                                </a>
+                                              ) : (
+                                                <p className="text-emerald-500">Sin PDF</p>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   </div>
                                 ) : null}
                               </div>

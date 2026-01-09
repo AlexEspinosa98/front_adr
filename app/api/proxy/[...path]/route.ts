@@ -3,120 +3,115 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE_URL =
   process.env.API_BASE_URL ?? "https://adr.ricardopupo.co/api/v1";
 
-async function proxyRequest(request: NextRequest, originalPath: string) {
-  const targetPath = originalPath.startsWith("/")
-    ? originalPath
-    : `/${originalPath}`;
+const isBinaryContent = (contentType: string) =>
+  /octet-stream|excel|spreadsheetml|application\/vnd/.test(contentType);
+
+async function forward(request: NextRequest) {
+  let targetPath = request.nextUrl.pathname.replace(/^\/api\/proxy/, "");
+  // Solo forzamos "/" final en endpoints de extensionists que lo requieren
+  if (/\/extensionists\/\d+\/(summary|export-excel)\/?$/.test(targetPath)) {
+    if (!targetPath.endsWith("/")) {
+      targetPath = `${targetPath}/`;
+    }
+  }
   const targetUrl = `${API_BASE_URL}${targetPath}${request.nextUrl.search}`;
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
+  const headers = new Headers();
+  request.headers.forEach((value, key) => {
+    if (key.toLowerCase() === "host") return;
+    headers.set(key, value);
+  });
+
+  const init: RequestInit = {
+    method: request.method,
+    headers,
+    redirect: "follow",
   };
 
-  // Forward authorization header if present
-  const authHeader = request.headers.get("Authorization");
-  if (authHeader) {
-    headers["Authorization"] = authHeader;
+  if (!["GET", "HEAD"].includes(request.method)) {
+    const bodyBuffer = await request.arrayBuffer();
+    if (bodyBuffer.byteLength > 0) {
+      init.body = bodyBuffer;
+    }
   }
 
-  try {
-    const fetchOptions: RequestInit = {
-      method: request.method,
-      headers,
-    };
+  const response = await fetch(targetUrl, { ...init, cache: "no-store" });
+  const contentType = response.headers.get("Content-Type") || "";
 
-    // Only include body for methods that support it
-    if (["POST", "PUT", "PATCH"].includes(request.method)) {
-      const body = await request.text();
-      if (body) {
-        fetchOptions.body = body;
-      }
-    }
-
-    const response = await fetch(targetUrl, fetchOptions);
-    const contentType = response.headers.get("Content-Type") || "";
-    const isBinary =
-      /octet-stream|excel|spreadsheetml|application\/vnd/.test(contentType);
-
-    if (isBinary) {
-      const buffer = await response.arrayBuffer();
-      return new NextResponse(buffer, {
-        status: response.status,
-        headers: {
-          "Content-Type": contentType || "application/octet-stream",
-          "Content-Disposition": response.headers.get("Content-Disposition") || "",
-        },
-      });
-    }
-
-    const data = await response.text();
-    return new NextResponse(data, {
+  if (isBinaryContent(contentType)) {
+    const buffer = await response.arrayBuffer();
+    return new NextResponse(buffer, {
       status: response.status,
       headers: {
-        "Content-Type": contentType || "application/json",
+        "Content-Type": contentType,
+        "Content-Disposition": response.headers.get("Content-Disposition") || "",
       },
     });
-  } catch (error) {
-    console.error("Proxy error:", error);
+  }
+
+  const text = await response.text();
+  return new NextResponse(text, {
+    status: response.status,
+    headers: {
+      "Content-Type": contentType || "application/json",
+    },
+  });
+}
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export async function GET(request: NextRequest) {
+  try {
+    return await forward(request);
+  } catch (error: any) {
     return NextResponse.json(
-      { error: "Error connecting to backend server" },
-      { status: 502 }
+      { error: "Proxy error", message: error?.message },
+      { status: 502 },
     );
   }
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const originalPath =
-    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
-    `/${path.join("/")}`;
-  return proxyRequest(request, originalPath);
+export async function POST(request: NextRequest) {
+  try {
+    return await forward(request);
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Proxy error", message: error?.message },
+      { status: 502 },
+    );
+  }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const originalPath =
-    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
-    `/${path.join("/")}`;
-  return proxyRequest(request, originalPath);
+export async function PUT(request: NextRequest) {
+  try {
+    return await forward(request);
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Proxy error", message: error?.message },
+      { status: 502 },
+    );
+  }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const originalPath =
-    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
-    `/${path.join("/")}`;
-  return proxyRequest(request, originalPath);
+export async function DELETE(request: NextRequest) {
+  try {
+    return await forward(request);
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Proxy error", message: error?.message },
+      { status: 502 },
+    );
+  }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const originalPath =
-    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
-    `/${path.join("/")}`;
-  return proxyRequest(request, originalPath);
-}
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const originalPath =
-    request.nextUrl.pathname.replace(/^\/api\/proxy/, "") ||
-    `/${path.join("/")}`;
-  return proxyRequest(request, originalPath);
+export async function PATCH(request: NextRequest) {
+  try {
+    return await forward(request);
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Proxy error", message: error?.message },
+      { status: 502 },
+    );
+  }
 }
