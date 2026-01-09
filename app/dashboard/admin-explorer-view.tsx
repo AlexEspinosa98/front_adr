@@ -1071,8 +1071,10 @@ export const AdminExplorerView = () => {
     }
     setExportError(null);
     try {
+      const normalizedState =
+        exportDepartment === "Atlántico" ? "Atlantico" : exportDepartment;
       const blob = await mutateExport({
-        state: exportDepartment,
+        state: normalizedState,
         city: exportCity || undefined,
         token: accessToken,
         tokenType,
