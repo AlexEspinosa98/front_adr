@@ -290,9 +290,8 @@ export const AdminExplorerView = () => {
     useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
   const [exportCity, setExportCity] = useState<string | undefined>(undefined);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [reportCityFilter, setReportCityFilter] = useState<string | undefined>(undefined);
-  const [reportZoneFilter, setReportZoneFilter] = useState<string | undefined>(undefined);
-  const [reportSearch, setReportSearch] = useState("");
+  const [reportNameFilter, setReportNameFilter] = useState("");
+  const [reportEmailFilter, setReportEmailFilter] = useState("");
   const [reportPage, setReportPage] = useState(1);
   const [reportExpandedPropertyId, setReportExpandedPropertyId] = useState<number | null>(null);
   const [reportExporting, setReportExporting] = useState(false);
@@ -376,12 +375,13 @@ export const AdminExplorerView = () => {
     new Set(extensionists.map((item) => item.zone).filter(Boolean) as string[]),
   );
   const filteredReportExtensionists = extensionists.filter((ext) => {
-    const matchesCity = reportCityFilter ? ext.city === reportCityFilter : true;
-    const matchesZone = reportZoneFilter ? ext.zone === reportZoneFilter : true;
-    const matchesName = reportSearch
-      ? ext.name.toLowerCase().includes(reportSearch.toLowerCase().trim())
+    const matchesName = reportNameFilter
+      ? ext.name.toLowerCase().includes(reportNameFilter.toLowerCase().trim())
       : true;
-    return matchesCity && matchesZone && matchesName;
+    const matchesEmail = reportEmailFilter
+      ? (ext.email ?? "").toLowerCase().includes(reportEmailFilter.toLowerCase().trim())
+      : true;
+    return matchesName && matchesEmail;
   });
   const reportPageSize = 10;
   const reportTotalPages = Math.max(
@@ -1672,51 +1672,25 @@ export const AdminExplorerView = () => {
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="grid flex-1 gap-3 md:grid-cols-2">
                   <label className="text-sm font-semibold text-emerald-700">
-                    Ciudad (reporte)
-                    <select
-                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                      value={reportCityFilter ?? ""}
-                      onChange={(e) => {
-                        setReportCityFilter(e.target.value || undefined);
-                        setReportPage(1);
-                      }}
-                    >
-                      <option value="">Todas</option>
-                      {availableCities.map((city) => (
-                        <option key={city} value={city}>
-                          {city}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-sm font-semibold text-emerald-700">
-                    Zona (reporte)
-                    <select
-                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                      value={reportZoneFilter ?? ""}
-                      onChange={(e) => {
-                        setReportZoneFilter(e.target.value || undefined);
-                        setReportPage(1);
-                      }}
-                    >
-                      <option value="">Todas</option>
-                      {availableZones.map((zone) => (
-                        <option key={zone} value={zone}>
-                          {zone}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="flex flex-1 flex-col gap-2 md:max-w-sm">
-                  <label className="text-sm font-semibold text-emerald-700">
-                    Buscar por nombre
+                    Nombre
                     <input
                       className="mt-1 w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                       placeholder="Nombre del extensionista"
-                      value={reportSearch}
+                      value={reportNameFilter}
                       onChange={(e) => {
-                        setReportSearch(e.target.value);
+                        setReportNameFilter(e.target.value);
+                        setReportPage(1);
+                      }}
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-emerald-700">
+                    Correo
+                    <input
+                      className="mt-1 w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      placeholder="Correo del extensionista"
+                      value={reportEmailFilter}
+                      onChange={(e) => {
+                        setReportEmailFilter(e.target.value);
                         setReportPage(1);
                       }}
                     />
@@ -1728,13 +1702,22 @@ export const AdminExplorerView = () => {
                   type="button"
                   className="rounded-md border border-emerald-200 px-3 py-1 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
                   onClick={() => {
-                    setReportCityFilter(undefined);
-                    setReportZoneFilter(undefined);
-                    setReportSearch("");
+                    setReportNameFilter("");
+                    setReportEmailFilter("");
                     setReportPage(1);
+                    refetchExtensionists();
                   }}
                 >
                   Limpiar filtros de reporte
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-emerald-200 px-3 py-1 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                  onClick={() => {
+                    refetchExtensionists();
+                  }}
+                >
+                  Actualizar
                 </button>
                 <span>
                   Mostrando {filteredReportExtensionists.length} de {extensionists.length} extensionistas
