@@ -167,6 +167,8 @@ const DEPARTMENTS = ["Magdalena", "Atlantico"] as const;
 
 const MUNICIPALITIES: Record<(typeof DEPARTMENTS)[number], string[]> = {
   Magdalena: [
+    "Ariguaní",
+    "Aracataca",
     "Cerro San Antonio",
     "Chivolo",
     "Ciénaga",
@@ -204,6 +206,8 @@ const MUNICIPALITIES: Record<(typeof DEPARTMENTS)[number], string[]> = {
 const SUMMARY_DEPARTMENTS = ["Magdalena", "Atlántico"] as const;
 const SUMMARY_CITIES: Record<(typeof SUMMARY_DEPARTMENTS)[number], string[]> = {
   Magdalena: [
+    "Ariguaní",
+    "Aracataca",
     "Cerro San Antonio",
     "Chivolo",
     "Ciénaga",
