@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Session } from "next-auth";
+import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import {
   FiActivity,
@@ -242,7 +243,11 @@ const SUMMARY_CITIES: Record<(typeof SUMMARY_DEPARTMENTS)[number], string[]> = {
   ],
 };
 
-export const AdminExplorerView = () => {
+type AdminExplorerViewProps = {
+  initialView?: "stats" | "visits" | "reports";
+};
+
+export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewProps) => {
   const { data: session } = useSession();
   const accessToken = (session as SessionWithToken | null)?.accessToken;
   const tokenType = (session as SessionWithToken | null)?.tokenType ?? "Token";
@@ -306,7 +311,9 @@ export const AdminExplorerView = () => {
   const [reportExpandedPropertyId, setReportExpandedPropertyId] = useState<number | null>(null);
   const [reportExporting, setReportExporting] = useState(false);
   const [reportExportError, setReportExportError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<"stats" | "visits" | "reports">("stats");
+  const [activeView, setActiveView] = useState<"stats" | "visits" | "reports">(
+    initialView,
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
     null,
@@ -1131,13 +1138,12 @@ export const AdminExplorerView = () => {
             Estadística
           </button>
           {!isRestricted ? (
-            <button
+            <Link
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "visits"
                   ? "bg-emerald-900 text-white"
                   : "text-emerald-900 hover:bg-emerald-50"
                 }`}
-              onClick={() => setActiveView("visits")}
-              type="button"
+              href="/dashboard/visitas"
             >
               <FiActivity
                 className={
@@ -1146,7 +1152,7 @@ export const AdminExplorerView = () => {
                 aria-hidden
               />
               Revisión de visitas
-            </button>
+            </Link>
           ) : null}
           <button
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "reports"
