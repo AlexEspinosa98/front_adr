@@ -149,8 +149,11 @@ export const exportSurveyExcel = async ({
   token,
   tokenType = "Token",
 }: ExportSurveyExcelParams) => {
-  const response = await httpClient.get<Blob>("/admin/surveys/export-excel", {
-    params: { state, city },
+  const params = new URLSearchParams();
+  if (state) params.append("state", state);
+  if (city) params.append("city", city);
+  const url = `/admin/surveys/export-excel${params.toString() ? `?${params.toString()}` : ""}`;
+  const response = await httpClient.get<Blob>(url, {
     responseType: "blob",
     headers:
       token && tokenType
