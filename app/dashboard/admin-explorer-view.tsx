@@ -60,6 +60,7 @@ import {
   SkeletonPropertiesSummary,
   SkeletonChart,
 } from "@/components/ui/Skeleton";
+import { ImageModal } from "@/components/ui/Modal";
 import { CityChart } from "./charts/CityChart";
 
 type SessionWithToken = Session & { accessToken?: string; tokenType?: string };
@@ -351,6 +352,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     phono_extra_1?: File;
     file_pdf?: File;
   }>({});
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [summaryDepartment, setSummaryDepartment] =
     useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
   const [summaryCity, setSummaryCity] = useState<string | undefined>(
@@ -742,6 +744,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   };
 
   const propertiesSectionRef = useRef<HTMLElement>(null);
+  const propertySurveysSectionRef = useRef<HTMLElement>(null);
 
   const renderListState = useCallback(
     ({
@@ -2853,6 +2856,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                     setUpdateError(null);
                                     setUpdateFiles({});
                                     setExpandedPropertyId(property.id);
+                                    // Scroll to surveys section after a short delay
+                                    setTimeout(() => {
+                                      propertySurveysSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                    }, 100);
                                   }}
                                 >
                                   Encuestas
@@ -2992,7 +2999,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                 )}
               </section>
 
-              <section className={SECTION_CLASS}>
+              <section ref={propertySurveysSectionRef} className={SECTION_CLASS}>
                 <SectionHeader
                   icon={<FiUsers aria-hidden />}
                   title="Encuestas de la propiedad"
@@ -3477,26 +3484,30 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                         key={photo.label}
                                         className="overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-sm"
                                       >
-                                        <Image
-                                          src={photo.url}
-                                          alt={photo.label}
-                                          width={800}
-                                          height={352}
-                                          className="h-44 w-full object-cover"
-                                          sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
-                                        />
+                                        <div
+                                          className="cursor-pointer"
+                                          onClick={() => setSelectedImageUrl(photo.url)}
+                                        >
+                                          <Image
+                                            src={photo.url}
+                                            alt={photo.label}
+                                            width={800}
+                                            height={352}
+                                            className="h-44 w-full object-cover transition hover:opacity-90"
+                                            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                                          />
+                                        </div>
                                         <div className="flex items-center justify-between px-3 py-2">
                                           <p className="text-sm font-semibold text-emerald-900">
                                             {photo.label}
                                           </p>
-                                          <a
+                                          <button
+                                            type="button"
                                             className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
-                                            href={photo.url}
-                                            target="_blank"
-                                            rel="noreferrer"
+                                            onClick={() => setSelectedImageUrl(photo.url)}
                                           >
                                             Ver grande
-                                          </a>
+                                          </button>
                                         </div>
                                       </div>
                                     ))}
@@ -3839,6 +3850,14 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
           </div>
         </div>
       ) : null}
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={!!selectedImageUrl}
+        onClose={() => setSelectedImageUrl(null)}
+        src={selectedImageUrl ?? ""}
+        alt="Foto ampliada"
+      />
     </div>
   );
 };
