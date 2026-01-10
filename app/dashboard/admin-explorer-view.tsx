@@ -813,10 +813,10 @@ export const AdminExplorerView = () => {
   );
   const photoGallery = (
     [
-    { label: "Foto del productor", url: visitDetail?.photo_user },
-    { label: "Foto de interacción", url: visitDetail?.photo_interaction },
-    { label: "Panorama", url: visitDetail?.photo_panorama },
-    { label: "Foto adicional", url: visitDetail?.phono_extra_1 },
+      { label: "Foto del productor", url: visitDetail?.photo_user },
+      { label: "Foto de interacción", url: visitDetail?.photo_interaction },
+      { label: "Panorama", url: visitDetail?.photo_panorama },
+      { label: "Foto adicional", url: visitDetail?.phono_extra_1 },
     ] as const
   )
     .filter((photo) => Boolean(photo.url))
@@ -1117,11 +1117,10 @@ export const AdminExplorerView = () => {
         </div>
         <nav className="space-y-2">
           <button
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
-              activeView === "stats"
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "stats"
                 ? "bg-emerald-900 text-white"
                 : "text-emerald-900 hover:bg-emerald-50"
-            }`}
+              }`}
             onClick={() => setActiveView("stats")}
             type="button"
           >
@@ -1133,14 +1132,13 @@ export const AdminExplorerView = () => {
           </button>
           {!isRestricted ? (
             <button
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
-                activeView === "visits"
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "visits"
                   ? "bg-emerald-900 text-white"
                   : "text-emerald-900 hover:bg-emerald-50"
-            }`}
-            onClick={() => setActiveView("visits")}
-            type="button"
-          >
+                }`}
+              onClick={() => setActiveView("visits")}
+              type="button"
+            >
               <FiActivity
                 className={
                   activeView === "visits" ? "text-white" : "text-emerald-500"
@@ -1151,11 +1149,10 @@ export const AdminExplorerView = () => {
             </button>
           ) : null}
           <button
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
-              activeView === "reports"
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "reports"
                 ? "bg-emerald-900 text-white"
                 : "text-emerald-900 hover:bg-emerald-50"
-            }`}
+              }`}
             onClick={() => setActiveView("reports")}
             type="button"
           >
@@ -1304,7 +1301,7 @@ export const AdminExplorerView = () => {
                             <td className="px-3 py-2 font-semibold text-emerald-900">
                               {propertiesTotals?.total_magdalena_atlantico ??
                                 (propertiesTotals?.magdalena ?? 0) +
-                                  (propertiesTotals?.atlantico ?? 0)}
+                                (propertiesTotals?.atlantico ?? 0)}
                             </td>
                           </tr>
                           <tr>
@@ -1319,7 +1316,7 @@ export const AdminExplorerView = () => {
                   </div>
 
                   <div className="grid gap-4 lg:grid-cols-3">
-                    <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                    <div className="md:col-span-2 xl:col-span-2 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
                       <p className="text-sm font-semibold text-emerald-900">
                         Visitas por departamento
                       </p>
@@ -1552,24 +1549,24 @@ export const AdminExplorerView = () => {
                                   <th className="px-3 py-2 font-semibold">Rejected</th>
                                 </tr>
                               </thead>
-                                <tbody className="divide-y divide-emerald-50">
-                                  {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
-                                    const label = `Visita ${idx + 1}`;
-                                    const stateCountsRaw = citySummary.states_summary?.[key];
-                                    const stateCounts = Array.isArray(stateCountsRaw)
-                                      ? stateCountsRaw.reduce<Record<string, number>>(
-                                          (acc, item: any) => {
-                                            if (item?.value) {
-                                              acc[item.value] = item.count ?? 0;
-                                            }
-                                            return acc;
-                                          },
-                                          {},
-                                        )
-                                      : (stateCountsRaw as Record<string, number>) ?? {};
-                                    return (
-                                      <tr key={key}>
-                                        <td className="px-3 py-2 text-emerald-900">{label}</td>
+                              <tbody className="divide-y divide-emerald-50">
+                                {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
+                                  const label = `Visita ${idx + 1}`;
+                                  const stateCountsRaw = citySummary.states_summary?.[key];
+                                  const stateCounts = Array.isArray(stateCountsRaw)
+                                    ? stateCountsRaw.reduce<Record<string, number>>(
+                                      (acc, item: any) => {
+                                        if (item?.value) {
+                                          acc[item.value] = item.count ?? 0;
+                                        }
+                                        return acc;
+                                      },
+                                      {},
+                                    )
+                                    : (stateCountsRaw as Record<string, number>) ?? {};
+                                  return (
+                                    <tr key={key}>
+                                      <td className="px-3 py-2 text-emerald-900">{label}</td>
                                       {["pending", "accepted", "rejected"].map((state) => (
                                         <td key={state} className="px-3 py-2">
                                           <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
@@ -1826,7 +1823,7 @@ export const AdminExplorerView = () => {
                                     type="button"
                                     onClick={() => handleExtensionistSelect(ext)}
                                   >
-                                  Ver estadística
+                                    Ver estadística
                                     <FiChevronRight aria-hidden />
                                   </button>
                                 </td>
@@ -2017,15 +2014,15 @@ export const AdminExplorerView = () => {
                           ) : null}
                         </div>
                       </div>
-                        {propertiesError ? (
-                          <p className="mt-2 text-sm text-red-600">
-                            {propertiesFetchError?.message ?? "No fue posible cargar las propiedades."}
-                          </p>
-                        ) : properties.length > 0 ? (
-                          <div className="mt-3 space-y-3">
-                            {properties.map((property) => {
-                              const isExpanded = reportExpandedPropertyId === property.id;
-                              return (
+                      {propertiesError ? (
+                        <p className="mt-2 text-sm text-red-600">
+                          {propertiesFetchError?.message ?? "No fue posible cargar las propiedades."}
+                        </p>
+                      ) : properties.length > 0 ? (
+                        <div className="mt-3 space-y-3">
+                          {properties.map((property) => {
+                            const isExpanded = reportExpandedPropertyId === property.id;
+                            return (
                               <div
                                 key={property.id}
                                 className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3"
@@ -2336,11 +2333,10 @@ export const AdminExplorerView = () => {
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <button
-                                    className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs font-semibold transition ${
-                                      isActive
+                                    className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs font-semibold transition ${isActive
                                         ? "border-emerald-900 bg-emerald-900 text-white"
                                         : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
-                                    }`}
+                                      }`}
                                     type="button"
                                     onClick={() =>
                                       handleExtensionistSelect(extensionist)
@@ -2495,174 +2491,173 @@ export const AdminExplorerView = () => {
 
                     <div className="space-y-3">
                       {paginatedProperties.map((property) => {
-                      const isExpanded = expandedPropertyId === property.id;
-                      return (
-                        <div
-                          className="rounded-xl border border-emerald-100 bg-white shadow-sm"
-                          key={property.id}
-                        >
+                        const isExpanded = expandedPropertyId === property.id;
+                        return (
                           <div
-                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                            onClick={() =>
-                              setExpandedPropertyId(
-                                isExpanded ? null : property.id,
-                              )
-                            }
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
+                            className="rounded-xl border border-emerald-100 bg-white shadow-sm"
+                            key={property.id}
+                          >
+                            <div
+                              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                              onClick={() =>
                                 setExpandedPropertyId(
                                   isExpanded ? null : property.id,
-                                );
+                                )
                               }
-                            }}
-                          >
-                            <div>
-                              <p className="text-base font-semibold text-emerald-900">
-                                {property.name}
-                              </p>
-                              <p className="text-sm text-emerald-500">
-                                {property.city ?? property.municipality ?? "Ciudad N/D"} ·{" "}
-                                {property.state ?? "Estado N/D"}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="flex flex-col gap-1 text-right">
-                                <p className="text-[11px] font-semibold text-emerald-700">
-                                  Visitas
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setExpandedPropertyId(
+                                    isExpanded ? null : property.id,
+                                  );
+                                }
+                              }}
+                            >
+                              <div>
+                                <p className="text-base font-semibold text-emerald-900">
+                                  {property.name}
                                 </p>
-                                <div className="flex gap-1">
-                                  {(["survey_1", "survey_2", "survey_3"] as const).map(
-                                    (key, idx) => (
-                                      <div
-                                        key={key}
-                                        className="rounded-md bg-white px-2 py-1 text-[11px] shadow-sm ring-1 ring-emerald-100"
-                                      >
-                                        <p className="font-semibold text-emerald-900">
-                                          V{idx + 1}
-                                        </p>
-                                        {renderPropertyVisitStates(
-                                          property.surveysStateSummary?.[key],
-                                        )}
-                                      </div>
-                                    ),
-                                  )}
-                                </div>
-                              </div>
-                              <button
-                              className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                  setSelectedProperty(property);
-                                  setSelectedVisit(1);
-                                  setVisitDecision(null);
-                                  setShowClassificationDetail(false);
-                                  setEditableVisit(null);
-                                  setEditableProducer(null);
-                                  setEditableProperty(null);
-                                  setApprovalProfile("");
-                                  setDecisionReason("");
-                                  setDecisionError(null);
-                                  setUpdateMessage(null);
-                                  setUpdateError(null);
-                                  setUpdateFiles({});
-                                  setExpandedPropertyId(property.id);
-                                }}
-                              >
-                                Encuestas
-                              </button>
-                              <span
-                                className={`rounded-full border border-emerald-200 p-2 text-emerald-600 transition ${
-                                  isExpanded ? "bg-emerald-50 rotate-90" : ""
-                                }`}
-                              >
-                                <FiChevronRight aria-hidden />
-                              </span>
-                            </div>
-                          </div>
-
-                          {isExpanded ? (
-                            <div className="grid gap-3 border-t border-emerald-100 px-4 py-3 md:grid-cols-3">
-                              <div className="rounded-lg bg-emerald-50 p-3">
-                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                                  Línea primaria
-                                </p>
-                                <p className="text-sm font-semibold text-emerald-900">
-                                  {property.primaryLine ?? "N/D"}
-                                </p>
-                                {property.secondaryLine ? (
-                                  <p className="text-xs text-emerald-500">
-                                    Secundaria: {property.secondaryLine}
-                                  </p>
-                                ) : null}
-                              </div>
-                              <div className="rounded-lg bg-emerald-50 p-3">
-                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                                  Vereda
-                                </p>
-                                <p className="text-sm font-semibold text-emerald-900">
-                                  {property.village ?? "N/D"}
-                                </p>
-                              </div>
-                              <div className="rounded-lg bg-emerald-50 p-3">
-                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                                  Área en producción
-                                </p>
-                                <p className="text-sm font-semibold text-emerald-900">
-                                  {property.areaInProduction ?? "N/D"} ha
-                                </p>
-                              </div>
-                              <div className="rounded-lg bg-emerald-50 p-3">
-                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                                  Coordenadas
-                                </p>
-                                <p className="text-sm font-semibold text-emerald-900">
-                                  {(property as any).latitude ?? "N/D"},{" "}
-                                  {(property as any).longitude ?? "N/D"}
-                                </p>
-                              </div>
-                              <div className="rounded-lg bg-emerald-50 p-3">
-                                <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
-                                  Creado
-                                </p>
-                                <p className="text-sm font-semibold text-emerald-900">
-                                  {property.createdAt
-                                    ? new Date(property.createdAt).toLocaleDateString()
-                                    : "N/D"}
+                                <p className="text-sm text-emerald-500">
+                                  {property.city ?? property.municipality ?? "Ciudad N/D"} ·{" "}
+                                  {property.state ?? "Estado N/D"}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
+                                <div className="flex flex-col gap-1 text-right">
+                                  <p className="text-[11px] font-semibold text-emerald-700">
+                                    Visitas
+                                  </p>
+                                  <div className="flex gap-1">
+                                    {(["survey_1", "survey_2", "survey_3"] as const).map(
+                                      (key, idx) => (
+                                        <div
+                                          key={key}
+                                          className="rounded-md bg-white px-2 py-1 text-[11px] shadow-sm ring-1 ring-emerald-100"
+                                        >
+                                          <p className="font-semibold text-emerald-900">
+                                            V{idx + 1}
+                                          </p>
+                                          {renderPropertyVisitStates(
+                                            property.surveysStateSummary?.[key],
+                                          )}
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
+                                </div>
                                 <button
-                                  className="inline-flex items-center gap-2 rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                                  className="rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
                                   type="button"
-                                  onClick={() => {
+                                  onClick={(event) => {
+                                    event.stopPropagation();
                                     setSelectedProperty(property);
                                     setSelectedVisit(1);
-                                  setVisitDecision(null);
-                                  setShowClassificationDetail(false);
-                                  setEditableVisit(null);
-                                  setEditableProducer(null);
-                                  setEditableProperty(null);
-                                  setApprovalProfile("");
-                                  setDecisionReason("");
-                                  setDecisionError(null);
-                                  setUpdateMessage(null);
-                                  setUpdateError(null);
-                                  setUpdateFiles({});
-                                }}
-                              >
-                                Ver encuestas
-                              </button>
+                                    setVisitDecision(null);
+                                    setShowClassificationDetail(false);
+                                    setEditableVisit(null);
+                                    setEditableProducer(null);
+                                    setEditableProperty(null);
+                                    setApprovalProfile("");
+                                    setDecisionReason("");
+                                    setDecisionError(null);
+                                    setUpdateMessage(null);
+                                    setUpdateError(null);
+                                    setUpdateFiles({});
+                                    setExpandedPropertyId(property.id);
+                                  }}
+                                >
+                                  Encuestas
+                                </button>
+                                <span
+                                  className={`rounded-full border border-emerald-200 p-2 text-emerald-600 transition ${isExpanded ? "bg-emerald-50 rotate-90" : ""
+                                    }`}
+                                >
+                                  <FiChevronRight aria-hidden />
+                                </span>
                               </div>
                             </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
+
+                            {isExpanded ? (
+                              <div className="grid gap-3 border-t border-emerald-100 px-4 py-3 md:grid-cols-3">
+                                <div className="rounded-lg bg-emerald-50 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                    Línea primaria
+                                  </p>
+                                  <p className="text-sm font-semibold text-emerald-900">
+                                    {property.primaryLine ?? "N/D"}
+                                  </p>
+                                  {property.secondaryLine ? (
+                                    <p className="text-xs text-emerald-500">
+                                      Secundaria: {property.secondaryLine}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <div className="rounded-lg bg-emerald-50 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                    Vereda
+                                  </p>
+                                  <p className="text-sm font-semibold text-emerald-900">
+                                    {property.village ?? "N/D"}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg bg-emerald-50 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                    Área en producción
+                                  </p>
+                                  <p className="text-sm font-semibold text-emerald-900">
+                                    {property.areaInProduction ?? "N/D"} ha
+                                  </p>
+                                </div>
+                                <div className="rounded-lg bg-emerald-50 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                    Coordenadas
+                                  </p>
+                                  <p className="text-sm font-semibold text-emerald-900">
+                                    {(property as any).latitude ?? "N/D"},{" "}
+                                    {(property as any).longitude ?? "N/D"}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg bg-emerald-50 p-3">
+                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                    Creado
+                                  </p>
+                                  <p className="text-sm font-semibold text-emerald-900">
+                                    {property.createdAt
+                                      ? new Date(property.createdAt).toLocaleDateString()
+                                      : "N/D"}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    className="inline-flex items-center gap-2 rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedProperty(property);
+                                      setSelectedVisit(1);
+                                      setVisitDecision(null);
+                                      setShowClassificationDetail(false);
+                                      setEditableVisit(null);
+                                      setEditableProducer(null);
+                                      setEditableProperty(null);
+                                      setApprovalProfile("");
+                                      setDecisionReason("");
+                                      setDecisionError(null);
+                                      setUpdateMessage(null);
+                                      setUpdateError(null);
+                                      setUpdateFiles({});
+                                    }}
+                                  >
+                                    Ver encuestas
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
                     <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <span className="text-xs text-emerald-600">
                         Mostrando {paginatedProperties.length} de {filteredProperties.length} propiedades
@@ -2742,11 +2737,10 @@ export const AdminExplorerView = () => {
                           return (
                             <button
                               key={num}
-                              className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${
-                                isActive
+                              className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${isActive
                                   ? "border-emerald-900 bg-emerald-900 text-white"
                                   : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
-                              }`}
+                                }`}
                               type="button"
                               onClick={() => {
                                 setSelectedVisit(num);
@@ -2830,17 +2824,16 @@ export const AdminExplorerView = () => {
                           )}
                           {visitDecision ? (
                             <span
-                              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                                visitDecision === "accepted"
+                              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${visitDecision === "accepted"
                                   ? "bg-emerald-100 text-emerald-800"
-                              : "bg-red-100 text-red-700"
-                            }`}
-                          >
-                            {visitDecision === "accepted"
-                              ? "Marcado como aceptado (solo UI)"
-                              : "Marcado como rechazado (solo UI)"}
-                          </span>
-                        ) : null}
+                                  : "bg-red-100 text-red-700"
+                                }`}
+                            >
+                              {visitDecision === "accepted"
+                                ? "Marcado como aceptado (solo UI)"
+                                : "Marcado como rechazado (solo UI)"}
+                            </span>
+                          ) : null}
                           {updateMessage ? (
                             <span className="rounded-md bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
                               {updateMessage}
@@ -2947,9 +2940,9 @@ export const AdminExplorerView = () => {
                                   value={
                                     formatDateWithTime(
                                       (editableVisit?.date_acompanamiento as string) ??
-                                        ((visitDetail as any)?.created_at as string | undefined),
+                                      ((visitDetail as any)?.created_at as string | undefined),
                                       (editableVisit?.hour_acompanamiento as string) ??
-                                        (visitDetail as any)?.hour_acompanamiento,
+                                      (visitDetail as any)?.hour_acompanamiento,
                                     ) ?? ""
                                   }
                                   readOnly
@@ -3164,11 +3157,10 @@ export const AdminExplorerView = () => {
                                         <button
                                           key={option}
                                           type="button"
-                                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                                            isActive
+                                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
                                               ? "bg-emerald-900 text-white"
                                               : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
-                                          }`}
+                                            }`}
                                           onClick={() => updateVisitField("compliance_status", option)}
                                         >
                                           {option}
@@ -3388,11 +3380,10 @@ export const AdminExplorerView = () => {
                                         <button
                                           key={role}
                                           type="button"
-                                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                                            isActive
+                                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
                                               ? "bg-emerald-900 text-white"
                                               : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
-                                          }`}
+                                            }`}
                                           onClick={() => updateVisitField("attended_by", role)}
                                         >
                                           {role}
@@ -3401,7 +3392,7 @@ export const AdminExplorerView = () => {
                                     })}
                                   </div>
                                   {(editableVisit?.attended_by as string) &&
-                                  (editableVisit?.attended_by as string) !== "Usuario Productor" ? (
+                                    (editableVisit?.attended_by as string) !== "Usuario Productor" ? (
                                     <FieldInput
                                       label="Solo si quien atiende es diferente al productor"
                                       value={editableVisit?.attendee_role as string}
@@ -3435,7 +3426,7 @@ export const AdminExplorerView = () => {
                                   value={
                                     formatDate(
                                       (visitDetail?.date_hour_end as string) ??
-                                        (visitDetail?.date_acompanamiento as string),
+                                      (visitDetail?.date_acompanamiento as string),
                                     ) ?? ""
                                   }
                                   readOnly
