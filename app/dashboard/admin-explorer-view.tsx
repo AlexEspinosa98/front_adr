@@ -10,6 +10,7 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Session } from "next-auth";
 import Link from "next/link";
+import Image from "next/image";
 import { signOut, useSession } from "next-auth/react";
 import {
   FiActivity,
@@ -36,10 +37,10 @@ import {
 import {
   ExtensionistProperty,
   fetchPropertySurveyVisit,
-  fetchExtensionistProperties,
   fetchExtensionistSummary,
   SurveysStateSummaryBucket,
   SurveysStateSummary,
+  type PropertySurveyVisit,
   updateSurveyState,
   basicUpdateSurvey,
   exportExtensionistExcel,
@@ -48,7 +49,6 @@ import {
   fetchSurveyStatistics,
   fetchSurveySummaryByCity,
   type CitySurveySummary,
-  type SummarySurveyBucket,
   exportSurveyExcel,
 } from "@/services/statistics";
 import { CityChart } from "./charts/CityChart";
@@ -129,7 +129,7 @@ const FieldInput = ({
       </p>
       {type === "textarea" ? (
         <textarea
-          className={`${baseClasses} mt-2 min-h-[96px] ${readOnly ? disabledClasses : ""}`}
+          className={`${baseClasses} mt-2 min-h-24 ${readOnly ? disabledClasses : ""}`}
           value={value ?? ""}
           placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
@@ -247,13 +247,63 @@ type AdminExplorerViewProps = {
   initialView?: "stats" | "visits" | "reports";
 };
 
+type ExtensionistPropertyApi = ExtensionistProperty & {
+  linea_productive_primary?: string;
+  linea_productive_secondary?: string;
+  area_in_production?: number | string;
+  latitude?: number | string;
+  longitude?: number | string;
+  created_at?: string;
+  surveys?: {
+    type_1?: { states?: string[] };
+    type_2?: { states?: string[] };
+    type_3?: { states?: string[] };
+  };
+  asnm?: number | string | null;
+};
+
+type EditableVisit = (PropertySurveyVisit & { approval_profile?: string }) & Record<string, unknown>;
+type EditableProducer =
+  ({ name?: string; type_id?: string; identification?: string; number_phone?: string } &
+    Record<string, unknown>);
+type EditablePropertyState = (ExtensionistPropertyApi & Record<string, unknown>) | null;
+type StateCountEntry = { value?: string; count?: number };
+type SurveySummaryEntry = {
+  count?: number;
+  latest_visit?: string | null;
+  file_pdf?: string | null;
+};
+type VisitExtensionist = {
+  name?: string;
+  identification?: string;
+  signing_image_path?: string;
+} & Record<string, unknown>;
+
+type ApiErrorPayload = { message?: string };
+type ApiErrorShape = { response?: { data?: ApiErrorPayload }; message?: string };
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error !== null) {
+    const maybeError = error as ApiErrorShape;
+    const responseMessage = maybeError.response?.data?.message;
+    if (typeof responseMessage === "string" && responseMessage.trim()) {
+      return responseMessage;
+    }
+    if (typeof maybeError.message === "string" && maybeError.message.trim()) {
+      return maybeError.message;
+    }
+  }
+  return fallback;
+};
+
 export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewProps) => {
   const { data: session } = useSession();
-  const accessToken = (session as SessionWithToken | null)?.accessToken;
-  const tokenType = (session as SessionWithToken | null)?.tokenType ?? "Token";
+  const sessionWithToken = session as SessionWithToken | null;
+  const accessToken = sessionWithToken?.accessToken;
+  const tokenType = sessionWithToken?.tokenType ?? "Token";
   const rawName =
-    ((session as SessionWithToken | null)?.user?.name as string | undefined) ??
-    ((session as any)?.user?.email as string | undefined) ??
+    sessionWithToken?.user?.name ??
+    sessionWithToken?.user?.email ??
     "";
   const userName = rawName.trim();
   const isRestricted =
@@ -276,13 +326,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   >(null);
   const [showClassificationDetail, setShowClassificationDetail] =
     useState(false);
-  const [editableVisit, setEditableVisit] = useState<Record<string, unknown> | null>(
-    null,
-  );
-  const [editableProducer, setEditableProducer] =
-    useState<Record<string, unknown> | null>(null);
+  const [editableVisit, setEditableVisit] = useState<EditableVisit | null>(null);
+  const [editableProducer, setEditableProducer] = useState<EditableProducer | null>(null);
   const [editableProperty, setEditableProperty] =
-    useState<Record<string, unknown> | null>(null);
+    useState<EditablePropertyState>(null);
   const [approvalProfile, setApprovalProfile] = useState("");
   const [decisionReason, setDecisionReason] = useState("");
   const [decisionError, setDecisionError] = useState<string | null>(null);
@@ -417,7 +464,11 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       acc[key as "survey_1" | "survey_2" | "survey_3"] = { pending: 0, accepted: 0, rejected: 0 };
       return acc;
     },
-    {} as any,
+    {
+      survey_1: { pending: 0, accepted: 0, rejected: 0 },
+      survey_2: { pending: 0, accepted: 0, rejected: 0 },
+      survey_3: { pending: 0, accepted: 0, rejected: 0 },
+    },
   );
   filteredReportExtensionists.forEach((ext) => {
     (["survey_1", "survey_2", "survey_3"] as const).forEach((key) => {
@@ -501,7 +552,6 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     isLoading: citySummaryLoading,
     isError: citySummaryError,
     error: citySummaryFetchError,
-    refetch: refetchCitySummary,
   } = useQuery({
     queryKey: ["survey-summary-city", summaryCity, accessToken, tokenType],
     queryFn: () =>
@@ -513,8 +563,13 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     mutationFn: exportSurveyExcel,
   });
 
+  const toStringOrUndefined = (value?: string | number | null) =>
+    value === undefined || value === null ? undefined : String(value);
+
   const summaryData = extensionistSummaryResponse?.data;
+  const summaryExtensionist = summaryData?.extensionist as Extensionist | undefined;
   const properties = (summaryData?.properties ?? []).map((prop) => {
+    const typedProp = prop as ExtensionistPropertyApi;
     const countStates = (states?: string[]) =>
       (states ?? []).reduce(
         (acc, state) => {
@@ -525,28 +580,29 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
         },
         { pending: 0, accepted: 0, rejected: 0 },
       );
-    const bucket1 = countStates((prop as any)?.surveys?.type_1?.states);
-    const bucket2 = countStates((prop as any)?.surveys?.type_2?.states);
-    const bucket3 = countStates((prop as any)?.surveys?.type_3?.states);
+    const bucket1 = countStates(typedProp.surveys?.type_1?.states);
+    const bucket2 = countStates(typedProp.surveys?.type_2?.states);
+    const bucket3 = countStates(typedProp.surveys?.type_3?.states);
     return {
-      id: prop.id,
-      name: prop.name,
-      city: prop.city,
-      municipality: prop.municipality,
-      state: prop.state,
-      village: prop.village,
-      primaryLine: (prop as any).linea_productive_primary,
-      secondaryLine: (prop as any).linea_productive_secondary,
-      areaInProduction: (prop as any).area_in_production,
-      latitude: (prop as any).latitude,
-      longitude: (prop as any).longitude,
-      createdAt: (prop as any).created_at,
+      id: typedProp.id,
+      name: typedProp.name,
+      city: typedProp.city,
+      municipality: typedProp.municipality,
+      state: typedProp.state,
+      village: typedProp.village,
+      primaryLine: typedProp.linea_productive_primary,
+      secondaryLine: typedProp.linea_productive_secondary,
+      areaInProduction: toStringOrUndefined(typedProp.area_in_production),
+      latitude: toStringOrUndefined(typedProp.latitude),
+      longitude: toStringOrUndefined(typedProp.longitude),
+      createdAt: typedProp.created_at,
+      asnm: typedProp.asnm,
       surveysStateSummary: {
         survey_1: bucket1,
         survey_2: bucket2,
         survey_3: bucket3,
       } as SurveysStateSummary,
-      surveySummary: (prop as any).surveys,
+      surveySummary: typedProp.surveys,
     } as ExtensionistProperty;
   });
   const basePropertiesSummary: SurveysStateSummary = {
@@ -726,13 +782,6 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
       .join(" ")
       .replace("Ict", "ICT");
-  const getVisitCount = (extensionist: Extensionist, key: "survey_1" | "survey_2" | "survey_3") => {
-    const bucket = extensionist.surveys_state_summary?.[key];
-    const pending = bucket?.pending ?? 0;
-    const accepted = bucket?.accepted ?? 0;
-    const rejected = bucket?.rejected ?? 0;
-    return pending + accepted + rejected;
-  };
   const renderVisitStates = (
     extensionist: Extensionist,
     key: "survey_1" | "survey_2" | "survey_3",
@@ -808,9 +857,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   const visitProducer = surveyVisitData?.producer as
     | Record<string, unknown>
     | undefined;
-  const visitExtensionist = visitDetail?.extensionist as
-    | Record<string, unknown>
-    | undefined;
+  const visitExtensionist = visitDetail?.extensionist as VisitExtensionist | undefined;
   const classificationEntries = Object.entries(
     visitDetail?.classification_user?.detail ?? {},
   );
@@ -833,12 +880,11 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     if (visitDetail) {
       setEditableVisit({
         ...visitDetail,
-        origen_register: (visitDetail as any)?.origen_register ?? "app_movil",
-        attended_by: (visitDetail as any)?.attended_by ?? "Usuario Productor",
+        origen_register: visitDetail.origen_register ?? "app_movil",
+        attended_by: visitDetail.attended_by ?? "Usuario Productor",
+        approval_profile: visitDetail.approval_profile ?? "",
       });
-      setApprovalProfile(
-        ((visitDetail as any)?.approval_profile as string | undefined) ?? "",
-      );
+      setApprovalProfile(visitDetail.approval_profile ?? "");
     } else {
       setEditableVisit(null);
       setApprovalProfile("");
@@ -849,15 +895,11 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   }, [visitDetail]);
 
   useEffect(() => {
-    setEditableProducer(
-      visitProducer ? (visitProducer as Record<string, unknown>) : null,
-    );
+    setEditableProducer(visitProducer ? { ...visitProducer } : null);
   }, [visitProducer]);
 
   useEffect(() => {
-    setEditableProperty(
-      visitPropertyData ? (visitPropertyData as unknown as Record<string, unknown>) : null,
-    );
+    setEditableProperty(visitPropertyData ? { ...visitPropertyData } : null);
   }, [visitPropertyData]);
 
   const clearUpdateFeedback = () => {
@@ -980,9 +1022,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     const file = files?.[0];
     setUpdateFiles((prev) => ({ ...prev, [key]: file || undefined }));
   };
-  const selectedDepartment = (editableProperty as any)?.state as
-    | (typeof DEPARTMENTS)[number]
-    | undefined;
+  const selectedDepartment =
+    typeof editableProperty?.state === "string"
+      ? (editableProperty.state as (typeof DEPARTMENTS)[number])
+      : undefined;
   const availableMunicipalities =
     MUNICIPALITIES[selectedDepartment ?? "Magdalena"] ?? [];
   const { mutateAsync: mutateSurveyState, isPending: decisionLoading } = useMutation({
@@ -1017,11 +1060,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
         setVisitDecision(state);
       }
       refetchSurveyVisit();
-    } catch (error: any) {
-      const message =
-        (error?.response?.data as any)?.message ??
-        error?.message ??
-        "No fue posible actualizar el estado.";
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, "No fue posible actualizar el estado.");
       setDecisionError(message);
     }
   };
@@ -1072,11 +1112,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       setUpdateFiles({});
       setUpdateMessage("Encuesta actualizada correctamente (sin clasificación).");
       await refetchSurveyVisit();
-    } catch (error: any) {
-      const message =
-        (error?.response?.data as any)?.message ??
-        error?.message ??
-        "No fue posible actualizar la encuesta.";
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, "No fue posible actualizar la encuesta.");
       setUpdateError(message);
     }
   };
@@ -1103,11 +1140,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       link.remove();
       window.URL.revokeObjectURL(url);
       setExportModalOpen(false);
-    } catch (error: any) {
-      const message =
-        (error?.response?.data as any)?.message ??
-        error?.message ??
-        "No fue posible descargar el Excel.";
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, "No fue posible descargar el Excel.");
       setExportError(message);
     }
   };
@@ -1175,7 +1209,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
 
       <main className="flex-1 px-4 py-8">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-          <header className="rounded-3xl bg-gradient-to-br from-emerald-900 to-emerald-800 p-8 text-white shadow-xl">
+          <header className="rounded-3xl bg-linear-to-br from-emerald-900 to-emerald-800 p-8 text-white shadow-xl">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-sm uppercase tracking-[0.2em] text-emerald-300">
@@ -1209,7 +1243,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
 
           {activeView === "stats" ? (
             <section
-              className={`${SECTION_CLASS} bg-gradient-to-b from-white to-emerald-50/50`}
+              className={`${SECTION_CLASS} bg-linear-to-b from-white to-emerald-50/50`}
             >
               <SectionHeader
                 icon={<FiBarChart2 aria-hidden />}
@@ -1560,8 +1594,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   const label = `Visita ${idx + 1}`;
                                   const stateCountsRaw = citySummary.states_summary?.[key];
                                   const stateCounts = Array.isArray(stateCountsRaw)
-                                    ? stateCountsRaw.reduce<Record<string, number>>(
-                                      (acc, item: any) => {
+                                    ? (stateCountsRaw as StateCountEntry[]).reduce<Record<string, number>>(
+                                      (acc, item) => {
                                         if (item?.value) {
                                           acc[item.value] = item.count ?? 0;
                                         }
@@ -1569,7 +1603,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                       },
                                       {},
                                     )
-                                    : (stateCountsRaw as Record<string, number>) ?? {};
+                                    : stateCountsRaw ?? {};
                                   return (
                                     <tr key={key}>
                                       <td className="px-3 py-2 text-emerald-900">{label}</td>
@@ -1620,7 +1654,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                       </div>
                                     </td>
                                     {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
-                                      const bucket = (prop as any)[key] as SummarySurveyBucket | undefined;
+                                      const bucket = prop[key];
                                       return (
                                         <td key={key} className="px-3 py-2">
                                           <div className="space-y-1 rounded-lg border border-emerald-100 bg-emerald-50/70 p-2">
@@ -1899,10 +1933,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             Nombre
                           </p>
                           <p className="text-sm font-semibold text-emerald-900">
-                            {(summaryData.extensionist as any)?.name ?? "N/D"}
+                            {summaryExtensionist?.name ?? "N/D"}
                           </p>
                           <p className="text-xs text-emerald-500">
-                            {(summaryData.extensionist as any)?.identification ?? "N/D"}
+                            {summaryExtensionist?.identification ?? "N/D"}
                           </p>
                         </div>
                         <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
@@ -1910,10 +1944,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             Contacto
                           </p>
                           <p className="text-sm font-semibold text-emerald-900">
-                            {(summaryData.extensionist as any)?.email ?? "N/D"}
+                            {summaryExtensionist?.email ?? "N/D"}
                           </p>
                           <p className="text-xs text-emerald-500">
-                            {(summaryData.extensionist as any)?.phone ?? "N/D"}
+                            {summaryExtensionist?.phone ?? "N/D"}
                           </p>
                         </div>
                         <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
@@ -1921,17 +1955,19 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             Ubicación
                           </p>
                           <p className="text-sm font-semibold text-emerald-900">
-                            {(summaryData.extensionist as any)?.city ?? "Ciudad N/D"}
+                            {summaryExtensionist?.city ?? "Ciudad N/D"}
                           </p>
                           <p className="text-xs text-emerald-500">
-                            Zona: {(summaryData.extensionist as any)?.zone ?? "N/D"}
+                            Zona: {summaryExtensionist?.zone ?? "N/D"}
                           </p>
                         </div>
                       </div>
                       {summaryData.states_summary ? (
                         <div className="mt-3 grid gap-3 md:grid-cols-3">
                           {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
-                            const bucket = (summaryData.states_summary as any)[key] ?? {};
+                            const bucket =
+                              summaryData.states_summary?.[key] ??
+                              ({} as SurveysStateSummaryBucket);
                             const total =
                               (bucket.pending ?? 0) +
                               (bucket.accepted ?? 0) +
@@ -2000,11 +2036,11 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 link.click();
                                 link.remove();
                                 window.URL.revokeObjectURL(url);
-                              } catch (error: any) {
-                                const message =
-                                  (error?.response?.data as any)?.message ??
-                                  error?.message ??
-                                  "No fue posible descargar el Excel.";
+                              } catch (error: unknown) {
+                                const message = getErrorMessage(
+                                  error,
+                                  "No fue posible descargar el Excel.",
+                                );
                                 setReportExportError(message);
                               } finally {
                                 setReportExporting(false);
@@ -2082,33 +2118,29 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   <div className="mt-3 grid gap-2 rounded-lg border border-emerald-100 bg-white p-3 text-sm text-emerald-800 md:grid-cols-2">
                                     <p>
                                       <span className="font-semibold">Línea primaria:</span>{" "}
-                                      {(property as any).primaryLine ?? (property as any).linea_productive_primary ?? "N/D"}
+                                      {property.primaryLine ?? "N/D"}
                                     </p>
                                     <p>
                                       <span className="font-semibold">Línea secundaria:</span>{" "}
-                                      {(property as any).secondaryLine ??
-                                        (property as any).linea_productive_secondary ??
-                                        "N/D"}
+                                      {property.secondaryLine ?? "N/D"}
                                     </p>
                                     <p>
                                       <span className="font-semibold">Área en producción:</span>{" "}
-                                      {(property as any).areaInProduction ??
-                                        (property as any).area_in_production ??
-                                        "N/D"}
+                                      {property.areaInProduction ?? "N/D"}
                                     </p>
                                     <p>
                                       <span className="font-semibold">Coordenadas:</span>{" "}
-                                      {(property as any).latitude ?? "N/D"},{" "}
-                                      {(property as any).longitude ?? "N/D"}
+                                      {property.latitude ?? "N/D"},{" "}
+                                      {property.longitude ?? "N/D"}
                                     </p>
                                     <p>
                                       <span className="font-semibold">ASNM:</span>{" "}
-                                      {(property as any).asnm ?? "N/D"}
+                                      {property.asnm ?? "N/D"}
                                     </p>
                                     <p>
                                       <span className="font-semibold">Creada:</span>{" "}
-                                      {(property as any).createdAt
-                                        ? new Date((property as any).createdAt).toLocaleDateString()
+                                      {property.createdAt
+                                        ? new Date(property.createdAt).toLocaleDateString()
                                         : "N/D"}
                                     </p>
                                     <div className="md:col-span-2">
@@ -2117,7 +2149,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                       </p>
                                       <div className="mt-2 grid gap-2 sm:grid-cols-3">
                                         {(["type_1", "type_2", "type_3"] as const).map((key, idx) => {
-                                          const visit = (property as any).surveySummary?.[key];
+                                          const visit = property.surveySummary?.[key] as
+                                            | SurveySummaryEntry
+                                            | undefined;
                                           return (
                                             <div
                                               key={key}
@@ -2441,7 +2475,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   key={key}
                                   className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3"
                                 >
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                  <p className="text-xs uppercase tracking-widest text-emerald-600">
                                     Visita {idx + 1}
                                   </p>
                                   <div className="mt-2 flex items-center justify-between">
@@ -2588,7 +2622,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             {isExpanded ? (
                               <div className="grid gap-3 border-t border-emerald-100 px-4 py-3 md:grid-cols-3">
                                 <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
                                     Línea primaria
                                   </p>
                                   <p className="text-sm font-semibold text-emerald-900">
@@ -2601,7 +2635,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   ) : null}
                                 </div>
                                 <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
                                     Vereda
                                   </p>
                                   <p className="text-sm font-semibold text-emerald-900">
@@ -2609,7 +2643,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   </p>
                                 </div>
                                 <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
                                     Área en producción
                                   </p>
                                   <p className="text-sm font-semibold text-emerald-900">
@@ -2617,16 +2651,16 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   </p>
                                 </div>
                                 <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
                                     Coordenadas
                                   </p>
                                   <p className="text-sm font-semibold text-emerald-900">
-                                    {(property as any).latitude ?? "N/D"},{" "}
-                                    {(property as any).longitude ?? "N/D"}
+                                    {property.latitude ?? "N/D"},{" "}
+                                    {property.longitude ?? "N/D"}
                                   </p>
                                 </div>
                                 <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-[0.1em] text-emerald-500">
+                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
                                     Creado
                                   </p>
                                   <p className="text-sm font-semibold text-emerald-900">
@@ -2734,7 +2768,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                         </p>
                         <p className="text-sm text-emerald-600">
                           {selectedProperty.city ?? selectedProperty.municipality ?? "Ciudad N/D"} ·{" "}
-                          {(selectedProperty as any).state ?? "Estado N/D"}
+                          {selectedProperty.state ?? "Estado N/D"}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -2901,7 +2935,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                           </p>
                         ) : (
                           <div className="space-y-4">
-                            <div className="rounded-2xl bg-gradient-to-br from-emerald-900 to-emerald-800 p-5 text-white shadow-sm">
+                            <div className="rounded-2xl bg-linear-to-br from-emerald-900 to-emerald-800 p-5 text-white shadow-sm">
                               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                 <div>
                                   <p className="text-xs uppercase tracking-[0.2em] text-emerald-200">
@@ -2919,8 +2953,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                     Visita No. {selectedVisit}
                                   </span>
                                   <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
-                                    Coordenadas: {(editableProperty as any)?.latitude ?? "N/D"},{" "}
-                                    {(editableProperty as any)?.longitude ?? "N/D"}
+                                    Coordenadas: {editableProperty?.latitude ?? "N/D"},{" "}
+                                    {editableProperty?.longitude ?? "N/D"}
                                   </span>
                                   <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
                                     Registro:{" "}
@@ -2946,9 +2980,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   value={
                                     formatDateWithTime(
                                       (editableVisit?.date_acompanamiento as string) ??
-                                      ((visitDetail as any)?.created_at as string | undefined),
+                                      visitDetail?.created_at,
                                       (editableVisit?.hour_acompanamiento as string) ??
-                                      (visitDetail as any)?.hour_acompanamiento,
+                                      visitDetail?.hour_acompanamiento,
                                     ) ?? ""
                                   }
                                   readOnly
@@ -2961,7 +2995,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                               <div className="grid gap-2 lg:grid-cols-3">
                                 <FieldInput
                                   label="Nombre Completo Usuario Productor"
-                                  value={(editableProducer as any)?.name}
+                                  value={editableProducer?.name ?? ""}
                                   onChange={(v) => updateProducerField("name", v)}
                                   placeholder="Ej: Juan Carlos Pérez Gómez"
                                 />
@@ -2969,18 +3003,18 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   label="Tipo de Documento"
                                   type="select"
                                   options={["CC", "TI", "CE", "NIT"]}
-                                  value={(editableProducer as any)?.type_id}
+                                  value={editableProducer?.type_id ?? ""}
                                   onChange={(v) => updateProducerField("type_id", v)}
                                 />
                                 <FieldInput
                                   label="Número de Identificacion"
-                                  value={(editableProducer as any)?.identification}
+                                  value={editableProducer?.identification ?? ""}
                                   onChange={(v) => updateProducerField("identification", v)}
                                   placeholder="Ej: 1234567890"
                                 />
                                 <FieldInput
                                   label="Número Telefonico"
-                                  value={(editableProducer as any)?.number_phone}
+                                  value={editableProducer?.number_phone ?? ""}
                                   onChange={(v) => updateProducerField("number_phone", v)}
                                   placeholder="Ej: 3001234567"
                                 />
@@ -2991,15 +3025,15 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                               <div className="grid gap-2 lg:grid-cols-3">
                                 <FieldInput
                                   label="Nombre del Predio"
-                                  value={(editableProperty as any)?.name}
+                                  value={editableProperty?.name ?? ""}
                                   onChange={(v) => updatePropertyField("name", v)}
                                   placeholder="Ej: Finca La Esperanza"
                                 />
                                 <FieldInput
                                   label="Coordenadas Geográficas"
                                   value={[
-                                    (editableProperty as any)?.latitude ?? "",
-                                    (editableProperty as any)?.longitude ?? "",
+                                    editableProperty?.latitude ?? "",
+                                    editableProperty?.longitude ?? "",
                                   ]
                                     .filter(Boolean)
                                     .join(", ")}
@@ -3015,7 +3049,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 />
                                 <FieldInput
                                   label="ASNM"
-                                  value={(editableProperty as any)?.asnm}
+                                  value={editableProperty?.asnm ?? ""}
                                   onChange={(v) => updatePropertyField("asnm", v)}
                                   placeholder="Ej: 0"
                                 />
@@ -3023,14 +3057,14 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   label="Departamento"
                                   type="select"
                                   options={[...DEPARTMENTS] as string[]}
-                                  value={(editableProperty as any)?.state}
+                                  value={editableProperty?.state ?? ""}
                                   onChange={(v) => updatePropertyField("state", v)}
                                 />
                                 <FieldInput
                                   label="Municipio"
                                   type="select"
                                   options={availableMunicipalities}
-                                  value={(editableProperty as any)?.city ?? (editableProperty as any)?.municipality}
+                                  value={editableProperty?.city ?? editableProperty?.municipality ?? ""}
                                   onChange={(v) => {
                                     updatePropertyField("city", v);
                                     updatePropertyField("municipality", v);
@@ -3038,7 +3072,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 />
                                 <FieldInput
                                   label="Corregimiento/Vereda"
-                                  value={(editableProperty as any)?.village}
+                                  value={editableProperty?.village ?? ""}
                                   onChange={(v) => updatePropertyField("village", v)}
                                   placeholder="Ej: Vereda Mock"
                                 />
@@ -3050,8 +3084,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 <FieldInput
                                   label="Linea Productiva Principal"
                                   value={
-                                    (editableProperty as any)?.primaryLine ??
-                                    (editableProperty as any)?.linea_productive_primary
+                                    editableProperty?.primaryLine ??
+                                    editableProperty?.linea_productive_primary ??
+                                    ""
                                   }
                                   onChange={(v) => {
                                     updatePropertyField("primaryLine", v);
@@ -3062,8 +3097,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 <FieldInput
                                   label="Linea Productiva Secundaria"
                                   value={
-                                    (editableProperty as any)?.secondaryLine ??
-                                    (editableProperty as any)?.linea_productive_secondary
+                                    editableProperty?.secondaryLine ??
+                                    editableProperty?.linea_productive_secondary ??
+                                    ""
                                   }
                                   onChange={(v) => {
                                     updatePropertyField("secondaryLine", v);
@@ -3075,8 +3111,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                               <FieldInput
                                 label="Área total En Producción"
                                 value={
-                                  (editableProperty as any)?.areaInProduction ??
-                                  (editableProperty as any)?.area_in_production
+                                  editableProperty?.areaInProduction ??
+                                  editableProperty?.area_in_production ??
+                                  ""
                                 }
                                 onChange={(v) => {
                                   updatePropertyField("areaInProduction", v);
@@ -3111,7 +3148,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                           key={key}
                                           className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2"
                                         >
-                                          <p className="text-xs uppercase tracking-[0.1em] text-emerald-600">
+                                          <p className="text-xs uppercase tracking-widest text-emerald-600">
                                             {prettifyKey(key)}
                                           </p>
                                           <p className="text-sm font-semibold text-emerald-900">
@@ -3193,10 +3230,13 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                         key={photo.label}
                                         className="overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-sm"
                                       >
-                                        <img
+                                        <Image
                                           src={photo.url}
                                           alt={photo.label}
+                                          width={800}
+                                          height={352}
                                           className="h-44 w-full object-cover"
+                                          sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
                                         />
                                         <div className="flex items-center justify-between px-3 py-2">
                                           <p className="text-sm font-semibold text-emerald-900">
@@ -3419,12 +3459,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                               <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
                                 <FieldInput
                                   label="Nombre del Extensionista"
-                                  value={(visitExtensionist as any)?.name}
+                                  value={visitExtensionist?.name as string}
                                   readOnly
                                 />
                                 <FieldInput
                                   label="Identificación Del Extensionista"
-                                  value={(visitExtensionist as any)?.identification}
+                                  value={visitExtensionist?.identification as string}
                                   readOnly
                                 />
                                 <FieldInput
@@ -3441,11 +3481,14 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
                                     Firma extensionista
                                   </p>
-                                  {(visitExtensionist as any)?.signing_image_path ? (
-                                    <img
-                                      src={(visitExtensionist as any)?.signing_image_path}
+                                  {visitExtensionist?.signing_image_path ? (
+                                    <Image
+                                      src={visitExtensionist.signing_image_path}
                                       alt="Firma del extensionista"
+                                      width={320}
+                                      height={80}
                                       className="mt-2 h-20 w-full max-w-xs rounded-md border border-emerald-100 bg-white object-contain p-2"
+                                      sizes="(max-width: 768px) 100vw, 320px"
                                     />
                                   ) : (
                                     <p className="text-sm font-semibold text-emerald-900">

@@ -16,6 +16,17 @@ type RawExtensionistProperty = {
   municipality?: string;
   address?: string;
   product?: string;
+  state?: string;
+  village?: string;
+  linea_productive_primary?: string;
+  linea_productive_secondary?: string;
+  area_in_production?: number | string | null;
+  latitude?: string | number;
+  longitude?: string | number;
+  created_at?: string;
+  surveys_state_summary?: SurveysStateSummary;
+  survey_summary?: Record<string, unknown>;
+  asnm?: string | number | null;
 };
 
 type RawPropertySurvey = {
@@ -61,6 +72,7 @@ export interface ExtensionistProperty {
   latitude?: string;
   longitude?: string;
   createdAt?: string;
+  asnm?: string | number | null;
   surveysStateSummary?: SurveysStateSummary;
   surveySummary?: Record<string, unknown>;
 }
@@ -250,12 +262,14 @@ export interface PropertySurveyVisit {
   visit_date?: string;
   date_hour_end?: string;
   origen_register?: string;
+  approval_profile?: string;
   state?: string;
   state_reason?: string | null;
   state_updated_by?: string | null;
   state_updated_at?: string | null;
   name_acompanamiento?: string;
   attended_by?: string;
+  attendee_role?: string;
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -284,12 +298,13 @@ export const fetchExtensionistProperties = async (
     },
   );
 
-  const rawList = Array.isArray(data.data)
-    ? data.data
-    : Array.isArray((data.data as { properties?: RawExtensionistProperty[] })?.properties)
-      ? ((data.data as { properties?: RawExtensionistProperty[] }).properties as RawExtensionistProperty[])
+  const rawData = data.data;
+  const rawList = Array.isArray(rawData)
+    ? rawData
+    : Array.isArray(rawData?.properties)
+      ? rawData.properties ?? []
       : [];
-  const summary = (data.data as any)?.surveys_state_summary;
+  const summary = !Array.isArray(rawData) ? rawData?.surveys_state_summary : undefined;
 
   return {
     message: data.message ?? "",
@@ -305,16 +320,20 @@ export const fetchExtensionistProperties = async (
       municipality: property.municipality ?? property.city,
       address: property.address,
       product: property.product,
-      state: (property as any).state,
-      village: (property as any).village,
-      primaryLine: (property as any).linea_productive_primary,
-      secondaryLine: (property as any).linea_productive_secondary,
-      areaInProduction: (property as any).area_in_production,
-      latitude: (property as any).latitude,
-      longitude: (property as any).longitude,
-      createdAt: (property as any).created_at,
-      surveysStateSummary: (property as any).surveys_state_summary,
-      surveySummary: (property as any).survey_summary,
+      state: property.state,
+      village: property.village,
+      primaryLine: property.linea_productive_primary,
+      secondaryLine: property.linea_productive_secondary,
+      areaInProduction:
+        property.area_in_production !== undefined && property.area_in_production !== null
+          ? String(property.area_in_production)
+          : undefined,
+      latitude: property.latitude !== undefined ? String(property.latitude) : undefined,
+      longitude: property.longitude !== undefined ? String(property.longitude) : undefined,
+      createdAt: property.created_at,
+      surveysStateSummary: property.surveys_state_summary,
+      surveySummary: property.survey_summary,
+      asnm: property.asnm,
     })),
   };
 };
