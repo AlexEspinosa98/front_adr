@@ -53,6 +53,13 @@ import {
   type CitySurveySummary,
   exportSurveyExcel,
 } from "@/services/statistics";
+import {
+  SkeletonStatsGrid,
+  SkeletonTable,
+  SkeletonPropertiesList,
+  SkeletonPropertiesSummary,
+  SkeletonChart,
+} from "@/components/ui/Skeleton";
 import { CityChart } from "./charts/CityChart";
 
 type SessionWithToken = Session & { accessToken?: string; tokenType?: string };
@@ -1231,20 +1238,19 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
           </h2>
         </div>
         <nav className="space-y-2">
-          <button
+          <Link
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "stats"
               ? "bg-emerald-900 text-white"
               : "text-emerald-900 hover:bg-emerald-50"
               }`}
-            onClick={() => setActiveView("stats")}
-            type="button"
+            href="/dashboard"
           >
             <FiBarChart2
               className={activeView === "stats" ? "text-white" : "text-emerald-500"}
               aria-hidden
             />
             Estadística
-          </button>
+          </Link>
           {!isRestricted ? (
             <Link
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "visits"
@@ -1308,23 +1314,20 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
               </button>
             </div>
             <nav className="space-y-2">
-              <button
+              <Link
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold transition ${activeView === "stats"
                   ? "bg-emerald-900 text-white"
                   : "text-emerald-900 hover:bg-emerald-50"
                   }`}
-                onClick={() => {
-                  setActiveView("stats");
-                  setMobileMenuOpen(false);
-                }}
-                type="button"
+                href="/dashboard"
+                onClick={() => setMobileMenuOpen(false)}
               >
                 <FiBarChart2
                   className={activeView === "stats" ? "text-white" : "text-emerald-500"}
                   aria-hidden
                 />
                 Estadística
-              </button>
+              </Link>
               {!isRestricted ? (
                 <Link
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold transition ${activeView === "visits"
@@ -1439,7 +1442,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
               </div>
 
               {statsLoading ? (
-                <p className="text-sm text-emerald-500">Cargando estadísticas…</p>
+                <SkeletonStatsGrid count={6} />
               ) : statsError ? (
                 <p className="text-sm text-red-600">
                   No fue posible obtener las estadísticas. Verifica tu sesión.
@@ -1589,7 +1592,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                         Top ciudades por total de visitas
                       </p>
                       <div className="mt-3">
-                        {topCities.length > 0 ? (
+                        {statsLoading ? (
+                          <SkeletonChart />
+                        ) : topCities.length > 0 ? (
                           <CityChart data={topCities} />
                         ) : (
                           <p className="text-sm text-emerald-500">
@@ -2530,7 +2535,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                   </span>
                 </div>
 
-                {extensionists.length > 0 ? (
+                {extensionistsLoading ? (
+                  <SkeletonTable rows={5} columns={9} />
+                ) : extensionists.length > 0 ? (
                   <div className="overflow-hidden rounded-xl border border-emerald-100 shadow-sm">
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-emerald-100 text-sm">
@@ -2668,6 +2675,13 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                   <p className="text-sm text-emerald-500">
                     Selecciona un extensionista para ver sus propiedades.
                   </p>
+                ) : propertiesLoading ? (
+                  <>
+                    <SkeletonPropertiesSummary />
+                    <div className="mt-4">
+                      <SkeletonPropertiesList count={4} />
+                    </div>
+                  </>
                 ) : properties.length > 0 ? (
                   <>
                     {propertiesSummary ? (
