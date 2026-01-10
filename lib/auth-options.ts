@@ -36,6 +36,7 @@ export const authOptions: NextAuthOptions = {
           const accessToken =
             response.data.access_token ?? response.data.api_token;
           const tokenType = response.data.token_type ?? "Token";
+          const name = response.data.name;
 
           if (!accessToken) {
             return null;
@@ -46,6 +47,7 @@ export const authOptions: NextAuthOptions = {
             email: credentials.email,
             accessToken,
             tokenType,
+            name,
           };
         } catch (error) {
           console.error("Error al autenticarse con el backend", error);
@@ -59,6 +61,7 @@ export const authOptions: NextAuthOptions = {
       if (user?.accessToken) {
         token.accessToken = user.accessToken;
         token.tokenType = user.tokenType ?? "Token";
+        token.name = user.name ?? token.name;
       }
       return token;
     },
@@ -66,6 +69,9 @@ export const authOptions: NextAuthOptions = {
       if (session.user && token.accessToken) {
         session.accessToken = token.accessToken as string;
         session.tokenType = (token.tokenType as string | undefined) ?? "Token";
+        if (token.name) {
+          session.user.name = token.name as string;
+        }
       }
       return session;
     },

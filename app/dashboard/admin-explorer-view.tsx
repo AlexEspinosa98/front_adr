@@ -246,8 +246,14 @@ export const AdminExplorerView = () => {
   const { data: session } = useSession();
   const accessToken = (session as SessionWithToken | null)?.accessToken;
   const tokenType = (session as SessionWithToken | null)?.tokenType ?? "Token";
-  const userName = (session?.user?.name as string | undefined)?.trim() ?? "";
-  const isCoordinator = userName.toLowerCase() === "coordinador";
+  const rawName =
+    ((session as SessionWithToken | null)?.user?.name as string | undefined) ??
+    ((session as any)?.user?.email as string | undefined) ??
+    "";
+  const userName = rawName.trim();
+  const isRestricted =
+    userName.toLowerCase() === "coordinador" ||
+    userName.toLowerCase() === "revisor";
   const [nameInput, setNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [cityFilter, setCityFilter] = useState<string | undefined>(undefined);
@@ -625,10 +631,10 @@ export const AdminExplorerView = () => {
   };
 
   useEffect(() => {
-    if (isCoordinator && activeView === "visits") {
+    if (isRestricted && activeView === "visits") {
       setActiveView("stats");
     }
-  }, [isCoordinator, activeView]);
+  }, [isRestricted, activeView]);
 
   useEffect(() => {
     if (activeView === "stats" && accessToken) {
@@ -1127,16 +1133,16 @@ export const AdminExplorerView = () => {
             />
             Estadística
           </button>
-          {!isCoordinator ? (
+          {!isRestricted ? (
             <button
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
                 activeView === "visits"
                   ? "bg-emerald-900 text-white"
                   : "text-emerald-900 hover:bg-emerald-50"
-              }`}
-              onClick={() => setActiveView("visits")}
-              type="button"
-            >
+            }`}
+            onClick={() => setActiveView("visits")}
+            type="button"
+          >
               <FiActivity
                 className={
                   activeView === "visits" ? "text-white" : "text-emerald-500"

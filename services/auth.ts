@@ -10,6 +10,7 @@ export interface LoginResponse {
     access_token?: string;
     api_token?: string;
     token_type?: string;
+    name?: string;
   };
   message: string;
   success: boolean;
