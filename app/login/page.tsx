@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { Session } from "next-auth";
-import { getSession, signIn } from "next-auth/react";
+import { getSession, signIn, useSession } from "next-auth/react";
 import { FiKey, FiLock, FiMail } from "react-icons/fi";
 
 interface LoginPayload {
@@ -17,7 +17,15 @@ const INPUT_STYLES =
 
 export default function LoginPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (status === "authenticated" && session) {
+      router.replace("/dashboard");
+    }
+  }, [session, status, router]);
 
   const loginMutation = useMutation({
     mutationFn: async (payload: LoginPayload) => {
@@ -62,6 +70,18 @@ export default function LoginPage() {
 
     loginMutation.mutate({ email, password });
   };
+
+  // Show loading while checking session
+  if (status === "loading" || status === "authenticated") {
+    return (
+      <section className="flex min-h-screen items-center justify-center bg-emerald-50 px-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-200 border-t-emerald-600" />
+          <p className="text-sm text-emerald-600">Verificando sesión...</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="flex min-h-screen items-center justify-center bg-emerald-50 px-4">
