@@ -3684,7 +3684,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                         <button
                                           key={role}
                                           type="button"
-                                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
+                                          className={`flex min-h-12 items-center justify-center rounded-md px-3 py-2 text-center text-sm font-semibold transition ${isActive
                                             ? "bg-emerald-900 text-white"
                                             : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
                                             }`}
@@ -3756,6 +3756,66 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 </div>
                               </div>
                             </SectionCard>
+
+                            {/* Duplicate action buttons at bottom for convenience */}
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 space-y-4">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
+                                Acciones rápidas
+                              </p>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="max-w-xs">
+                                  <FieldInput
+                                    label="Perfil (requerido para aceptar)"
+                                    value={approvalProfile}
+                                    onChange={(v) => setApprovalProfile(v)}
+                                    placeholder="Ingresa el perfil antes de aceptar"
+                                    highlight
+                                  />
+                                </div>
+                                <div className="max-w-md">
+                                  <FieldInput
+                                    label="Motivo (opcional)"
+                                    value={decisionReason}
+                                    onChange={(v) => setDecisionReason(v)}
+                                    placeholder="Ej: Documentos verificados"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <button
+                                  className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                  type="button"
+                                  onClick={handleBasicUpdate}
+                                  disabled={updatingVisit || !visitDetail?.id}
+                                >
+                                  <FiFileText aria-hidden />
+                                  {updatingVisit ? "Guardando..." : "Guardar cambios"}
+                                </button>
+                                <button
+                                  className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                  type="button"
+                                  onClick={() => handleDecisionSubmit("accepted")}
+                                  disabled={!approvalProfile.trim() || decisionLoading || !visitDetail?.id}
+                                  title={
+                                    approvalProfile.trim()
+                                      ? "Marcar como aceptado"
+                                      : "Agrega el perfil antes de aceptar"
+                                  }
+                                >
+                                  <FiCheck aria-hidden />
+                                  Aceptar
+                                </button>
+                                <button
+                                  className="inline-flex items-center gap-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:border-red-200"
+                                  type="button"
+                                  onClick={() => handleDecisionSubmit("rejected")}
+                                  disabled={!approvalProfile.trim() || decisionLoading || !visitDetail?.id}
+                                >
+                                  <FiX aria-hidden />
+                                  Rechazar
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
