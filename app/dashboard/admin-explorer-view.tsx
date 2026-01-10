@@ -1188,13 +1188,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
               Revisión de visitas
             </Link>
           ) : null}
-          <button
+          <Link
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "reports"
-              ? "bg-emerald-900 text-white"
-              : "text-emerald-900 hover:bg-emerald-50"
+                ? "bg-emerald-900 text-white"
+                : "text-emerald-900 hover:bg-emerald-50"
               }`}
-            onClick={() => setActiveView("reports")}
-            type="button"
+            href="/dashboard/reporte-extensionista"
           >
             <FiUsers
               className={
@@ -1203,7 +1202,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
               aria-hidden
             />
             Reporte de extensionista
-          </button>
+          </Link>
         </nav>
       </aside>
 
