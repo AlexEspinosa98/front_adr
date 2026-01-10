@@ -1159,8 +1159,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
         <nav className="space-y-2">
           <button
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "stats"
-                ? "bg-emerald-900 text-white"
-                : "text-emerald-900 hover:bg-emerald-50"
+              ? "bg-emerald-900 text-white"
+              : "text-emerald-900 hover:bg-emerald-50"
               }`}
             onClick={() => setActiveView("stats")}
             type="button"
@@ -1174,8 +1174,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
           {!isRestricted ? (
             <Link
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "visits"
-                  ? "bg-emerald-900 text-white"
-                  : "text-emerald-900 hover:bg-emerald-50"
+                ? "bg-emerald-900 text-white"
+                : "text-emerald-900 hover:bg-emerald-50"
                 }`}
               href="/dashboard/visitas"
             >
@@ -1190,8 +1190,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
           ) : null}
           <button
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "reports"
-                ? "bg-emerald-900 text-white"
-                : "text-emerald-900 hover:bg-emerald-50"
+              ? "bg-emerald-900 text-white"
+              : "text-emerald-900 hover:bg-emerald-50"
               }`}
             onClick={() => setActiveView("reports")}
             type="button"
@@ -2284,7 +2284,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                       value={cityFilter ?? ""}
                       onChange={(e) =>
                         applyFiltersAndReset({
-                          cityOverride: e.target.value || undefined,
+                          cityOverride: e.target.value,
                         })
                       }
                     >
@@ -2304,7 +2304,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                       value={zoneFilter ?? ""}
                       onChange={(e) =>
                         applyFiltersAndReset({
-                          zoneOverride: e.target.value || undefined,
+                          zoneOverride: e.target.value,
                         })
                       }
                     >
@@ -2374,8 +2374,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 <td className="px-4 py-3 text-right">
                                   <button
                                     className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs font-semibold transition ${isActive
-                                        ? "border-emerald-900 bg-emerald-900 text-white"
-                                        : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
+                                      ? "border-emerald-900 bg-emerald-900 text-white"
+                                      : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
                                       }`}
                                     type="button"
                                     onClick={() =>
@@ -2778,8 +2778,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             <button
                               key={num}
                               className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${isActive
-                                  ? "border-emerald-900 bg-emerald-900 text-white"
-                                  : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
+                                ? "border-emerald-900 bg-emerald-900 text-white"
+                                : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
                                 }`}
                               type="button"
                               onClick={() => {
@@ -2865,8 +2865,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                           {visitDecision ? (
                             <span
                               className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${visitDecision === "accepted"
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : "bg-red-100 text-red-700"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-red-100 text-red-700"
                                 }`}
                             >
                               {visitDecision === "accepted"
@@ -3201,8 +3201,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                           key={option}
                                           type="button"
                                           className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
-                                              ? "bg-emerald-900 text-white"
-                                              : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                            ? "bg-emerald-900 text-white"
+                                            : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
                                             }`}
                                           onClick={() => updateVisitField("compliance_status", option)}
                                         >
@@ -3427,8 +3427,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                           key={role}
                                           type="button"
                                           className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
-                                              ? "bg-emerald-900 text-white"
-                                              : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                            ? "bg-emerald-900 text-white"
+                                            : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
                                             }`}
                                           onClick={() => updateVisitField("attended_by", role)}
                                         >
