@@ -4,6 +4,7 @@ import {
   FormEvent,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -726,7 +727,14 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     setUpdateFiles({});
     setPropertySearch("");
     setPropertyPage(1);
+
+    // Scroll to properties section after a short delay to ensure DOM update
+    setTimeout(() => {
+      propertiesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   };
+
+  const propertiesSectionRef = useRef<HTMLElement>(null);
 
   const renderListState = useCallback(
     ({
@@ -2649,7 +2657,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                 )}
               </section>
 
-              <section className={SECTION_CLASS}>
+              <section ref={propertiesSectionRef} className={SECTION_CLASS}>
                 <SectionHeader
                   icon={<FiHome aria-hidden />}
                   title="Propiedades del extensionista"
