@@ -185,7 +185,7 @@ export interface UpdateSurveyStateInput {
   surveyId: number;
   state: SurveyStateValue;
   stateReason?: string;
-  perfil: string;
+  perfil?: string;
   token?: string;
   tokenType?: string;
   csrfToken?: string;
@@ -459,12 +459,17 @@ export const updateSurveyState = async ({
   const url = `/admin/surveys/${surveyTypeId}/${surveyId}/state/`;
   const { data } = await httpClient.post<UpdateSurveyStateResponse>(
     url,
+    (() => {
+      const payload: Record<string, unknown> = {
+        state,
+        state_reason: stateReason,
+      };
+      if (perfil) {
+        payload.perfil = perfil;
+      }
+      return payload;
+    })(),
     {
-      state,
-      state_reason: stateReason,
-    },
-    {
-      params: { perfil },
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",

@@ -174,8 +174,8 @@ const MUNICIPALITIES: Record<(typeof DEPARTMENTS)[number], string[]> = {
     "Ciénaga",
     "Concordia",
     "El Banco",
-    "El Piñon",
-    "Fundacion",
+    "El Piñón",
+    "Fundación",
     "GUAMAL",
     "Nueva Granada",
     "Pedraza",
@@ -213,8 +213,8 @@ const SUMMARY_CITIES: Record<(typeof SUMMARY_DEPARTMENTS)[number], string[]> = {
     "Ciénaga",
     "Concordia",
     "El Banco",
-    "El Piñon",
-    "Fundacion",
+    "El Piñón",
+    "Fundación",
     "Guamal",
     "Nueva Granada",
     "Pedraza",
@@ -986,8 +986,8 @@ export const AdminExplorerView = () => {
   });
 
   const handleDecisionSubmit = async (state: "accepted" | "rejected") => {
-    if (!approvalProfile.trim()) {
-      setDecisionError("Agrega el perfil antes de aceptar o rechazar.");
+    if (state === "accepted" && !approvalProfile.trim()) {
+      setDecisionError("Agrega el perfil antes de aceptar.");
       return;
     }
     if (!selectedVisit || !visitDetail?.id) {
@@ -1001,7 +1001,7 @@ export const AdminExplorerView = () => {
         surveyId: visitDetail.id,
         state,
         stateReason: decisionReason || undefined,
-        perfil: approvalProfile.trim(),
+        perfil: state === "accepted" ? approvalProfile.trim() : undefined,
         token: accessToken,
         tokenType,
       });
