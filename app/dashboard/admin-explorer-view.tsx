@@ -1271,7 +1271,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       </aside>
 
       <main className="flex-1 px-4 py-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
           <header className="rounded-3xl bg-linear-to-br from-emerald-900 to-emerald-800 p-8 text-white shadow-xl">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
@@ -2431,15 +2431,15 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                       <table className="min-w-full divide-y divide-emerald-100 text-sm">
                         <thead className="bg-emerald-50/80">
                           <tr className="text-left text-emerald-500">
-                            <th className="px-4 pb-3 pt-2 font-medium">Nombre</th>
-                            <th className="px-4 pb-3 pt-2 font-medium">Correo</th>
-                            <th className="px-4 pb-3 pt-2 font-medium">Teléfono</th>
-                            <th className="px-4 pb-3 pt-2 font-medium">Ciudad</th>
-                            <th className="px-4 pb-3 pt-2 font-medium">Visita 1</th>
-                            <th className="px-4 pb-3 pt-2 font-medium">Visita 2</th>
-                            <th className="px-4 pb-3 pt-2 font-medium">Visita 3</th>
-                            <th className="px-4 pb-3 pt-2 font-medium">Registrado</th>
-                            <th className="px-4 pb-3 pt-2 font-medium"></th>
+                            <th className="px-3 pb-3 pt-2 font-medium">Nombre</th>
+                            <th className="px-3 pb-3 pt-2 font-medium">Correo</th>
+                            <th className="px-3 pb-3 pt-2 font-medium">Teléfono</th>
+                            <th className="px-3 pb-3 pt-2 font-medium">Ciudad</th>
+                            <th className="px-2 pb-3 pt-2 text-center font-medium">V1</th>
+                            <th className="px-2 pb-3 pt-2 text-center font-medium">V2</th>
+                            <th className="px-2 pb-3 pt-2 text-center font-medium">V3</th>
+                            <th className="px-3 pb-3 pt-2 font-medium">Registrado</th>
+                            <th className="px-2 pb-3 pt-2 font-medium"></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-emerald-100">
@@ -2454,33 +2454,33 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 key={extensionist.id}
                                 className={isActive ? "bg-emerald-50" : undefined}
                               >
-                                <td className="px-4 py-3 font-semibold text-emerald-900">
+                                <td className="px-3 py-2 font-semibold text-emerald-900">
                                   {extensionist.name}
                                 </td>
-                                <td className="px-4 py-3 text-emerald-600">
+                                <td className="px-3 py-2 text-emerald-600">
                                   {extensionist.email ?? "—"}
                                 </td>
-                                <td className="px-4 py-3 text-emerald-600">
+                                <td className="px-3 py-2 text-emerald-600">
                                   {extensionist.phone}
                                 </td>
-                                <td className="px-4 py-3 text-emerald-600">
+                                <td className="px-3 py-2 text-emerald-600">
                                   {extensionist.city ?? "—"}
                                 </td>
-                                <td className="px-4 py-3 text-emerald-700">
+                                <td className="px-2 py-2 text-center">
                                   {renderVisitStates(extensionist, "survey_1")}
                                 </td>
-                                <td className="px-4 py-3 text-emerald-700">
+                                <td className="px-2 py-2 text-center">
                                   {renderVisitStates(extensionist, "survey_2")}
                                 </td>
-                                <td className="px-4 py-3 text-emerald-700">
+                                <td className="px-2 py-2 text-center">
                                   {renderVisitStates(extensionist, "survey_3")}
                                 </td>
-                                <td className="px-4 py-3 text-emerald-600">
+                                <td className="px-3 py-2 text-emerald-600">
                                   {registeredAt}
                                 </td>
-                                <td className="px-4 py-3 text-right">
+                                <td className="px-2 py-2 text-right">
                                   <button
-                                    className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs font-semibold transition ${isActive
+                                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition ${isActive
                                       ? "border-emerald-900 bg-emerald-900 text-white"
                                       : "border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-900"
                                       }`}
