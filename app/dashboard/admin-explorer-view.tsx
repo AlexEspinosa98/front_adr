@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/Skeleton";
 import { ImageModal } from "@/components/ui/Modal";
 import { CityChart } from "./charts/CityChart";
+import { GeneralSummaryChart } from "./charts/GeneralSummaryChart";
 
 type SessionWithToken = Session & { accessToken?: string; tokenType?: string };
 
@@ -1465,67 +1466,20 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                     <p className="text-xs text-emerald-500">
                       Totales de visitas y propiedades
                     </p>
-                    <div className="mt-3 overflow-x-auto">
-                      <table className="min-w-full divide-y divide-emerald-100 text-sm">
-                        <thead className="bg-emerald-50/80 text-emerald-600">
-                          <tr className="text-left">
-                            <th className="px-3 py-2 font-semibold">Concepto</th>
-                            <th className="px-3 py-2 font-semibold">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-emerald-50">
-                          <tr>
-                            <td className="px-3 py-2 text-emerald-900">Visita 1</td>
-                            <td className="px-3 py-2 font-semibold text-emerald-900">
-                              {totals?.survey_1 ?? 0}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="px-3 py-2 text-emerald-900">Visita 2</td>
-                            <td className="px-3 py-2 font-semibold text-emerald-900">
-                              {totals?.survey_2 ?? 0}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="px-3 py-2 text-emerald-900">Visita 3</td>
-                            <td className="px-3 py-2 font-semibold text-emerald-900">
-                              {totals?.survey_3 ?? 0}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="px-3 py-2 text-emerald-900">Total visitas</td>
-                            <td className="px-3 py-2 font-semibold text-emerald-900">
-                              {totals?.all_types ?? 0}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="px-3 py-2 text-emerald-900">Propiedades Magdalena</td>
-                            <td className="px-3 py-2 font-semibold text-emerald-900">
-                              {propertiesTotals?.magdalena ?? 0}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="px-3 py-2 text-emerald-900">Propiedades Atlántico</td>
-                            <td className="px-3 py-2 font-semibold text-emerald-900">
-                              {propertiesTotals?.atlantico ?? 0}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="px-3 py-2 text-emerald-900">Total Mag + Atl</td>
-                            <td className="px-3 py-2 font-semibold text-emerald-900">
-                              {propertiesTotals?.total_magdalena_atlantico ??
-                                (propertiesTotals?.magdalena ?? 0) +
-                                (propertiesTotals?.atlantico ?? 0)}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="px-3 py-2 text-emerald-900">Extensionistas únicos</td>
-                            <td className="px-3 py-2 font-semibold text-emerald-900">
-                              {extensionistsUnique}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
+                    <div className="mt-3">
+                      <GeneralSummaryChart
+                        totals={totals ?? {
+                          survey_1: 0,
+                          survey_2: 0,
+                          survey_3: 0,
+                          all_types: 0,
+                        }}
+                        propertiesTotals={propertiesTotals ?? {
+                          magdalena: 0,
+                          atlantico: 0,
+                          total_magdalena_atlantico: 0,
+                        }}
+                      />
                     </div>
                   </div>
 
