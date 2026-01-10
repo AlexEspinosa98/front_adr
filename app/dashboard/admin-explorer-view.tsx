@@ -27,6 +27,7 @@ import {
   FiX,
   FiFileText,
   FiExternalLink,
+  FiMenu,
 } from "react-icons/fi";
 
 import {
@@ -56,7 +57,7 @@ import { CityChart } from "./charts/CityChart";
 type SessionWithToken = Session & { accessToken?: string; tokenType?: string };
 
 const SECTION_CLASS =
-  "rounded-2xl bg-white p-6 shadow-sm ring-1 ring-emerald-100 flex flex-col gap-4";
+  "rounded-2xl bg-white p-4 md:p-6 shadow-sm ring-1 ring-emerald-100 flex flex-col gap-4 overflow-hidden";
 
 const SectionHeader = ({
   icon,
@@ -361,6 +362,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   const [activeView, setActiveView] = useState<"stats" | "visits" | "reports">(
     initialView,
   );
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
     null,
@@ -1270,31 +1272,126 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
         </nav>
       </aside>
 
-      <main className="flex-1 px-4 py-8">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-          <header className="rounded-3xl bg-linear-to-br from-emerald-900 to-emerald-800 p-8 text-white shadow-xl">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          {/* Slide-out menu */}
+          <aside className="fixed left-0 top-0 h-full w-64 bg-white p-6 shadow-xl">
+            <div className="mb-6 flex items-center justify-between">
               <div>
-                <p className="text-sm uppercase tracking-[0.2em] text-emerald-300">
-                  Flujo administrativo
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-400">
+                  Navegación
                 </p>
-                <h1 className="mt-4 text-3xl font-semibold">
-                  {activeView === "stats"
-                    ? "Resumen estadístico de encuestas"
-                    : activeView === "visits"
-                      ? "Revisión de extensionistas"
-                      : "Reporte de extensionista"}
-                </h1>
-                <p className="mt-3 text-base text-emerald-200">
-                  {activeView === "stats"
-                    ? "Explora totales, cobertura y top extensionistas."
-                    : activeView === "visits"
-                      ? "Busca extensionistas registrados y revisa sus datos básicos."
-                      : "Consulta el resumen de extensionistas y sus visitas."}
-                </p>
+                <h2 className="text-lg font-semibold text-emerald-900">
+                  Panel principal
+                </h2>
               </div>
               <button
-                className="inline-flex items-center gap-2 rounded-md bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-md p-2 text-emerald-600 hover:bg-emerald-50"
+                type="button"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <nav className="space-y-2">
+              <button
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold transition ${activeView === "stats"
+                  ? "bg-emerald-900 text-white"
+                  : "text-emerald-900 hover:bg-emerald-50"
+                  }`}
+                onClick={() => {
+                  setActiveView("stats");
+                  setMobileMenuOpen(false);
+                }}
+                type="button"
+              >
+                <FiBarChart2
+                  className={activeView === "stats" ? "text-white" : "text-emerald-500"}
+                  aria-hidden
+                />
+                Estadística
+              </button>
+              {!isRestricted ? (
+                <Link
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold transition ${activeView === "visits"
+                    ? "bg-emerald-900 text-white"
+                    : "text-emerald-900 hover:bg-emerald-50"
+                    }`}
+                  href="/dashboard/visitas"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <FiActivity
+                    className={
+                      activeView === "visits" ? "text-white" : "text-emerald-500"
+                    }
+                    aria-hidden
+                  />
+                  Revisión de visitas
+                </Link>
+              ) : null}
+              <Link
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold transition ${activeView === "reports"
+                  ? "bg-emerald-900 text-white"
+                  : "text-emerald-900 hover:bg-emerald-50"
+                  }`}
+                href="/dashboard/reporte-extensionista"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <FiUsers
+                  className={
+                    activeView === "reports" ? "text-white" : "text-emerald-500"
+                  }
+                  aria-hidden
+                />
+                Reporte de extensionista
+              </Link>
+            </nav>
+          </aside>
+        </div>
+      )}
+
+      <main className="flex-1 px-3 py-4 md:px-4 md:py-8 overflow-x-hidden">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 md:gap-6 overflow-hidden">
+          <header className="rounded-2xl md:rounded-3xl bg-linear-to-br from-emerald-900 to-emerald-800 p-4 md:p-8 text-white shadow-xl">
+            <div className="flex flex-col gap-3 md:gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-3">
+                {/* Hamburger menu button - mobile only */}
+                <button
+                  className="mt-1 rounded-md bg-white/10 p-2 lg:hidden"
+                  onClick={() => setMobileMenuOpen(true)}
+                  type="button"
+                  aria-label="Abrir menú"
+                >
+                  <FiMenu size={20} />
+                </button>
+                <div>
+                  <p className="text-xs md:text-sm uppercase tracking-[0.15em] md:tracking-[0.2em] text-emerald-300">
+                    Flujo administrativo
+                  </p>
+                  <h1 className="mt-2 md:mt-4 text-xl md:text-3xl font-semibold leading-tight">
+                    {activeView === "stats"
+                      ? "Resumen estadístico de encuestas"
+                      : activeView === "visits"
+                        ? "Revisión de extensionistas"
+                        : "Reporte de extensionista"}
+                  </h1>
+                  <p className="mt-2 md:mt-3 text-sm md:text-base text-emerald-200">
+                    {activeView === "stats"
+                      ? "Explora totales, cobertura y top extensionistas."
+                      : activeView === "visits"
+                        ? "Busca extensionistas registrados y revisa sus datos básicos."
+                        : "Consulta el resumen de extensionistas y sus visitas."}
+                  </p>
+                </div>
+              </div>
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20 w-full md:w-auto"
                 onClick={handleLogout}
                 type="button"
               >
@@ -1427,40 +1524,40 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                         Totales de visitas 1, 2 y 3 por departamento
                       </p>
                       {departmentRows.length > 0 ? (
-                        <div className="mt-3 overflow-x-auto">
+                        <div className="mt-3 overflow-x-auto -mx-4 md:mx-0">
                           <table className="min-w-full divide-y divide-emerald-100 text-sm">
                             <thead className="bg-emerald-50/80">
                               <tr className="text-left text-emerald-600">
-                                <th className="px-3 py-2 font-semibold">Departamento</th>
-                                <th className="px-3 py-2 font-semibold">Visita 1</th>
-                                <th className="px-3 py-2 font-semibold">Visita 2</th>
-                                <th className="px-3 py-2 font-semibold">Visita 3</th>
-                                <th className="px-3 py-2 font-semibold">Total</th>
+                                <th className="px-2 md:px-3 py-2 font-semibold">Depto.</th>
+                                <th className="px-2 py-2 text-center font-semibold">V1</th>
+                                <th className="px-2 py-2 text-center font-semibold">V2</th>
+                                <th className="px-2 py-2 text-center font-semibold">V3</th>
+                                <th className="px-2 py-2 text-center font-semibold">Total</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-emerald-50">
                               {departmentRows.map((row) => (
                                 <tr key={row.state}>
-                                  <td className="px-3 py-2 font-semibold text-emerald-900">
+                                  <td className="px-2 md:px-3 py-2 font-semibold text-emerald-900 text-xs md:text-sm">
                                     {row.state}
                                   </td>
-                                  <td className="px-3 py-2">
-                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                  <td className="px-2 py-2 text-center">
+                                    <span className="inline-block min-w-8 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
                                       {row.survey_1}
                                     </span>
                                   </td>
-                                  <td className="px-3 py-2">
-                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                  <td className="px-2 py-2 text-center">
+                                    <span className="inline-block min-w-8 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
                                       {row.survey_2}
                                     </span>
                                   </td>
-                                  <td className="px-3 py-2">
-                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                  <td className="px-2 py-2 text-center">
+                                    <span className="inline-block min-w-8 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
                                       {row.survey_3}
                                     </span>
                                   </td>
-                                  <td className="px-3 py-2">
-                                    <span className="rounded-full bg-emerald-900 px-2 py-1 text-xs font-semibold text-white">
+                                  <td className="px-2 py-2 text-center">
+                                    <span className="inline-block min-w-8 rounded-full bg-emerald-900 px-2 py-0.5 text-xs font-semibold text-white">
                                       {row.total}
                                     </span>
                                   </td>
@@ -2316,20 +2413,20 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                   onSubmit={handleFilterSubmit}
                 >
                   <input
-                    className="rounded-md border border-emerald-200 px-4 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    className="w-full rounded-md border border-emerald-200 px-3 py-3 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                     placeholder="Nombre"
                     value={nameInput}
                     onChange={(event) => setNameInput(event.target.value)}
                   />
                   <input
-                    className="rounded-md border border-emerald-200 px-4 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    className="w-full rounded-md border border-emerald-200 px-3 py-3 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                     placeholder="Correo"
                     value={emailInput}
                     onChange={(event) => setEmailInput(event.target.value)}
                   />
                   <div className="flex gap-2">
                     <button
-                      className="flex flex-1 items-center justify-center gap-2 rounded-md bg-emerald-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800"
+                      className="flex flex-1 items-center justify-center gap-2 rounded-md bg-emerald-900 px-3 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800"
                       type="submit"
                       disabled={!accessToken}
                     >
@@ -2337,7 +2434,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                       Buscar
                     </button>
                     <button
-                      className="flex items-center rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                      className="flex items-center rounded-md border border-emerald-200 px-3 py-3 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
                       type="button"
                       onClick={() => {
                         setNameInput("");
