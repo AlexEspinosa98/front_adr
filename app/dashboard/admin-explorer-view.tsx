@@ -1232,7 +1232,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   };
   return (
     <div className="flex min-h-screen bg-emerald-50">
-      <aside className="hidden w-64 shrink-0 flex-col gap-2 bg-white p-6 shadow-sm ring-1 ring-emerald-100 lg:flex">
+      <aside className="fixed left-0 top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 flex-col gap-2 overflow-y-auto bg-white p-6 shadow-sm ring-1 ring-emerald-100 lg:flex">
         <div className="mb-4">
           <p className="text-xs uppercase tracking-[0.2em] text-emerald-400">
             Navegación
@@ -1371,7 +1371,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
         </div>
       )}
 
-      <main className="flex-1 px-3 py-4 md:px-4 md:py-8 overflow-x-hidden">
+      <main className="flex-1 px-3 py-4 md:px-4 md:py-8 overflow-x-hidden lg:ml-64">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 md:gap-6 overflow-hidden">
           <header className="rounded-2xl md:rounded-3xl bg-linear-to-br from-emerald-900 to-emerald-800 p-4 md:p-8 text-white shadow-xl">
             <div className="flex flex-col gap-3 md:gap-4 md:flex-row md:items-center md:justify-between">
