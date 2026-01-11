@@ -5,7 +5,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { Session } from "next-auth";
 import { getSession, signIn, useSession } from "next-auth/react";
-import { FiKey, FiLock, FiMail } from "react-icons/fi";
+import { FiKey, FiMail } from "react-icons/fi";
+import Image from "next/image";
 
 interface LoginPayload {
   email: string;
@@ -86,10 +87,14 @@ export default function LoginPage() {
   return (
     <section className="flex min-h-screen items-center justify-center bg-emerald-50 px-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl ring-1 ring-emerald-100">
-        <div className="mb-8 flex flex-col items-center gap-2 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-            <FiLock aria-hidden size={22} />
-          </span>
+        <div className="mb-8 flex flex-col items-center gap-4 text-center">
+          <Image
+            src="/Images/EPSEA.svg"
+            alt="EPSEA Logo"
+            width={180}
+            height={88}
+            priority
+          />
           <div>
             <h1 className="text-xl font-semibold text-emerald-900">
               Panel Administrativo
