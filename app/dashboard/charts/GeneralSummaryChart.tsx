@@ -9,9 +9,9 @@ import {
     XAxis,
     YAxis,
     Cell,
-    TooltipProps,
     PieChart,
     Pie,
+    type TooltipProps,
 } from "recharts";
 
 interface GeneralSummaryChartProps {
@@ -33,15 +33,19 @@ interface ChartData {
     value: number;
     category?: string;
     color: string;
-    [key: string]: any;
+    [key: string]: string | number | undefined;
 }
+
+type ChartTooltipProps = TooltipProps<number, string> & {
+    payload?: Array<{ payload: ChartData }>;
+};
 
 const CustomTooltip = ({
     active,
     payload,
-}: any) => {
-    if (active && payload && payload.length) {
-        const data = payload[0].payload;
+}: ChartTooltipProps) => {
+    const data = payload?.[0]?.payload;
+    if (active && data) {
         return (
             <div className="rounded-lg border border-emerald-100 bg-white/95 p-3 shadow-lg backdrop-blur-md">
                 <p className="text-sm font-medium text-gray-900">
@@ -170,7 +174,7 @@ export const GeneralSummaryChart = ({
                             <p className="text-xs text-emerald-500 font-medium">Total</p>
                         </div>
                     </div>
-                    <div className="flex justify-center gap-4 mt-[-20px]">
+                    <div className="flex justify-center gap-4 -mt-5">
                         {propertiesData.map((entry) => (
                             <div key={entry.name} className="flex items-center gap-2">
                                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
