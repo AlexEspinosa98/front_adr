@@ -6,7 +6,7 @@
  */
 
 const shimmerClass =
-    "relative overflow-hidden before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.5s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/60 before:to-transparent";
+    "relative overflow-hidden before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.5s_infinite] before:bg-linear-to-r before:from-transparent before:via-white/60 before:to-transparent";
 
 /** Base skeleton block with customizable dimensions */
 export const Skeleton = ({
@@ -19,7 +19,7 @@ export const Skeleton = ({
     height?: string;
 }) => (
     <div
-        className={`rounded-md bg-gradient-to-r from-emerald-100 to-emerald-50 ${shimmerClass} ${className}`}
+        className={`rounded-md bg-linear-to-r from-emerald-100 to-emerald-50 ${shimmerClass} ${className}`}
         style={{ width, height }}
     />
 );
@@ -36,7 +36,7 @@ export const SkeletonText = ({
         {Array.from({ length: lines }).map((_, i) => (
             <div
                 key={i}
-                className={`h-4 rounded-md bg-gradient-to-r from-emerald-100 to-emerald-50 ${shimmerClass} ${i === lines - 1 ? "w-3/4" : "w-full"
+                className={`h-4 rounded-md bg-linear-to-r from-emerald-100 to-emerald-50 ${shimmerClass} ${i === lines - 1 ? "w-3/4" : "w-full"
                     }`}
             />
         ))}
@@ -48,7 +48,7 @@ export const SkeletonStatCard = () => (
     <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
         <div className="flex items-center gap-3">
             <div
-                className={`h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-50 ${shimmerClass}`}
+                className={`h-10 w-10 rounded-xl bg-linear-to-br from-emerald-100 to-emerald-50 ${shimmerClass}`}
             />
             <div className="flex-1 space-y-2">
                 <div className={`h-3 w-20 rounded bg-emerald-100 ${shimmerClass}`} />
@@ -73,7 +73,7 @@ export const SkeletonTableRow = ({ columns = 5 }: { columns?: number }) => (
         {Array.from({ length: columns }).map((_, i) => (
             <td key={i} className="px-3 py-3">
                 <div
-                    className={`h-4 rounded bg-gradient-to-r from-emerald-100 to-emerald-50 ${shimmerClass} ${i === 0 ? "w-24" : i === columns - 1 ? "w-16" : "w-12"
+                    className={`h-4 rounded bg-linear-to-r from-emerald-100 to-emerald-50 ${shimmerClass} ${i === 0 ? "w-24" : i === columns - 1 ? "w-16" : "w-12"
                         }`}
                 />
             </td>
@@ -177,7 +177,7 @@ export const SkeletonPropertiesSummary = () => (
 export const SkeletonChart = () => (
     <div className="flex flex-col items-center justify-center py-8">
         <div
-            className={`h-48 w-48 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 ${shimmerClass}`}
+            className={`h-48 w-48 rounded-full bg-linear-to-br from-emerald-100 to-emerald-50 ${shimmerClass}`}
         />
         <div className="mt-6 flex flex-wrap justify-center gap-3">
             {[1, 2, 3, 4].map((i) => (
