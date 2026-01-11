@@ -317,9 +317,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     sessionWithToken?.user?.email ??
     "";
   const userName = rawName.trim();
+  const normalizedRole = userName.toLowerCase();
   const isRestricted =
-    userName.toLowerCase() === "coordinador" ||
-    userName.toLowerCase() === "revisor";
+    normalizedRole === "coordinador" || normalizedRole === "revisor";
+  const isDecisionReadOnly = normalizedRole === "revisor_editor";
   const [nameInput, setNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [cityFilter, setCityFilter] = useState<string | undefined>(undefined);
@@ -943,6 +944,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     | Record<string, unknown>
     | undefined;
   const visitExtensionist = visitDetail?.extensionist as VisitExtensionist | undefined;
+  const [initialVisit, setInitialVisit] = useState<Record<string, unknown> | null>(null);
+  const [initialProducer, setInitialProducer] = useState<Record<string, unknown> | null>(null);
+  const [initialProperty, setInitialProperty] = useState<Record<string, unknown> | null>(null);
   const classificationEntries = Object.entries(
     visitDetail?.classification_user?.detail ?? {},
   );
@@ -970,9 +974,11 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
         approval_profile: visitDetail.approval_profile ?? "",
       });
       setApprovalProfile(visitDetail.approval_profile ?? "");
+      setInitialVisit(visitDetail as Record<string, unknown>);
     } else {
       setEditableVisit(null);
       setApprovalProfile("");
+      setInitialVisit(null);
     }
     setUpdateMessage(null);
     setUpdateError(null);
@@ -981,10 +987,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
 
   useEffect(() => {
     setEditableProducer(visitProducer ? { ...visitProducer } : null);
+    setInitialProducer(visitProducer ? { ...visitProducer } : null);
   }, [visitProducer]);
 
   useEffect(() => {
     setEditableProperty(visitPropertyData ? { ...visitPropertyData } : null);
+    setInitialProperty(visitPropertyData ? { ...visitPropertyData } : null);
   }, [visitPropertyData]);
 
   const clearUpdateFeedback = () => {
@@ -1021,9 +1029,25 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     return Object.keys(output).length > 0 ? output : undefined;
   };
 
+  const diffPayload = (
+    current?: Record<string, unknown> | null,
+    original?: Record<string, unknown> | null,
+    allowedKeys?: string[],
+  ) => {
+    if (!current) return undefined;
+    const payload: Record<string, unknown> = {};
+    Object.entries(current).forEach(([key, value]) => {
+      if (allowedKeys && !allowedKeys.includes(key)) return;
+      const originalValue = original ? original[key] : undefined;
+      if (value !== originalValue) {
+        payload[key] = value;
+      }
+    });
+    return cleanPayload(payload);
+  };
+
   const buildSurveyPayload = () => {
     if (!editableVisit) return undefined;
-    const source = editableVisit as Record<string, unknown>;
     const allowedKeys = [
       "objetive_accompaniment",
       "initial_diagnosis",
@@ -1039,36 +1063,27 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       "attended_by",
       "attendee_role",
       "state",
-      "photo_user",
-      "photo_interaction",
-      "photo_panorama",
-      "phono_extra_1",
-      "file_pdf",
     ];
-    const payload: Record<string, unknown> = {};
-    allowedKeys.forEach((key) => {
-      if (key in source) {
-        payload[key] = source[key];
-      }
-    });
-    return cleanPayload(payload);
+    return diffPayload(
+      editableVisit as Record<string, unknown>,
+      initialVisit,
+      allowedKeys,
+    );
   };
 
   const buildProducerPayload = () => {
     if (!editableProducer) return undefined;
-    const source = editableProducer as Record<string, unknown>;
-    const payload: Record<string, unknown> = {};
-    ["name", "type_id", "identification", "number_phone"].forEach((key) => {
-      if (key in source) {
-        payload[key] = source[key];
-      }
-    });
-    return cleanPayload(payload);
+    return diffPayload(
+      editableProducer as Record<string, unknown>,
+      initialProducer,
+      ["name", "type_id", "identification", "number_phone"],
+    );
   };
 
   const buildPropertyPayload = () => {
     if (!editableProperty) return undefined;
     const source = editableProperty as Record<string, unknown>;
+    const original = initialProperty;
     const mapping: Record<string, string[]> = {
       name: ["name"],
       latitude: ["latitude"],
@@ -1084,16 +1099,17 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     };
     const payload: Record<string, unknown> = {};
     Object.entries(mapping).forEach(([target, candidates]) => {
-      const value = candidates
-        .map((key) => source[key])
-        .find(
-          (item) =>
-            item !== undefined &&
-            item !== null &&
-            !(typeof item === "string" && item.trim() === ""),
-        );
-      if (value !== undefined) {
-        payload[target] = value;
+      const currentValue = candidates.map((k) => source[k]).find((v) => v !== undefined);
+      const originalValue = candidates
+        .map((k) => (original as any)?.[k])
+        .find((v) => v !== undefined);
+      if (
+        currentValue !== undefined &&
+        currentValue !== null &&
+        !(typeof currentValue === "string" && currentValue.trim() === "") &&
+        currentValue !== originalValue
+      ) {
+        payload[target] = currentValue;
       }
     });
     return cleanPayload(payload);
@@ -1121,6 +1137,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   });
 
   const handleDecisionSubmit = async (state: "accepted" | "rejected") => {
+    if (isDecisionReadOnly) {
+      setDecisionError("Tu rol no permite aceptar o rechazar visitas.");
+      return;
+    }
     if (state === "accepted" && !approvalProfile.trim()) {
       setDecisionError("Agrega el perfil antes de aceptar.");
       return;
@@ -3022,9 +3042,16 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                             type="button"
                             onClick={() => handleDecisionSubmit("accepted")}
-                            disabled={!approvalProfile.trim() || decisionLoading || !visitDetail?.id}
+                            disabled={
+                              isDecisionReadOnly ||
+                              !approvalProfile.trim() ||
+                              decisionLoading ||
+                              !visitDetail?.id
+                            }
                             title={
-                              approvalProfile.trim()
+                              isDecisionReadOnly
+                                ? "Tu rol no permite esta acción"
+                                : approvalProfile.trim()
                                 ? "Marcar como aceptado"
                                 : "Agrega el perfil antes de aceptar"
                             }
@@ -3036,7 +3063,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             className="inline-flex items-center gap-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:border-red-200"
                             type="button"
                             onClick={() => handleDecisionSubmit("rejected")}
-                            disabled={!approvalProfile.trim() || decisionLoading || !visitDetail?.id}
+                            disabled={isDecisionReadOnly || decisionLoading || !visitDetail?.id}
                           >
                             <FiX aria-hidden />
                             Rechazar
@@ -3072,6 +3099,11 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                               {visitDecision === "accepted"
                                 ? "Marcado como aceptado (solo UI)"
                                 : "Marcado como rechazado (solo UI)"}
+                            </span>
+                          ) : null}
+                          {isDecisionReadOnly ? (
+                            <span className="rounded-md bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                              Rol revisor_editor: no puede aceptar/rechazar
                             </span>
                           ) : null}
                           {updateMessage ? (
