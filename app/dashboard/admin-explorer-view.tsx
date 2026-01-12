@@ -798,7 +798,41 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     return time ? `${datePart} ${time}`.trim() : datePart;
   };
 
+  const CLASSIFICATION_LABELS: Record<string, string> = {
+    main_productive_activity: "Actividad productiva principal",
+    secondary_productive_activities: "Actividades productivas secundarias",
+    tools_and_equipment: "Herramientas y equipos",
+    good_agricultural_practices: "Buenas prácticas agrícolas",
+    commercialization_structure: "Estructura de comercialización",
+    markets: "Acceso a mercados",
+    added_value: "Valor agregado",
+    records: "Registros (contables/productivos)",
+    labor_type: "Tipo de mano de obra",
+    credit_and_banking: "Acceso a crédito y servicios bancarios",
+    organization_membership: "Pertenencia a organizaciones",
+    collective_activities: "Actividades colectivas",
+    entrepreneurship_associativity: "Emprendimiento y asociatividad",
+    commercial_alliances: "Alianzas comerciales",
+    technical_support: "Asistencia / apoyo técnico",
+    quality_certifications: "Certificaciones de calidad",
+    intellectual_property: "Propiedad intelectual",
+    access_information_sources: "Acceso a fuentes de información",
+    access_to_ict: "Acceso a TIC",
+    use_of_ict_decision: "Uso de TIC para la toma de decisiones",
+    ict_skills: "Habilidades en TIC",
+    knowledge_appropriation: "Apropiación del conocimiento",
+    environmental_practices: "Prácticas ambientales",
+    sustainable_practices: "Prácticas sostenibles",
+    climate_change_adaptation: "Adaptación al cambio climático",
+    environmental_regulations: "Cumplimiento de normatividad ambiental",
+    participation_mechanisms: "Mecanismos de participación",
+    participation_tools: "Herramientas de participación",
+    political_social_control: "Control político y social",
+    community_self_management: "Autogestión comunitaria",
+  };
+
   const prettifyKey = (key: string) =>
+    CLASSIFICATION_LABELS[key] ??
     key
       .split("_")
       .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
@@ -1073,6 +1107,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       "attended_by",
       "attendee_role",
       "state",
+      "medition_focalization",
     ];
     return diffPayload(
       editableVisit as Record<string, unknown>,
@@ -3279,14 +3314,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   ]
                                     .filter(Boolean)
                                     .join(", ")}
-                                  onChange={(v) => {
-                                    const [lat, lon] = v.split(",").map((part) => part.trim());
-                                    setEditableProperty((prev) =>
-                                      prev
-                                        ? { ...prev, latitude: lat ?? "", longitude: lon ?? "" }
-                                        : prev,
-                                    );
-                                  }}
+                                  readOnly
                                   placeholder="Ej: 10.188612074, -74.065231283"
                                 />
                                 <FieldInput
