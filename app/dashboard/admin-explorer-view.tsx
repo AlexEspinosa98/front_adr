@@ -804,6 +804,16 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
       .join(" ")
       .replace("Ict", "ICT");
+  const normalizeMediaUrl = (url?: string | null) => {
+    if (!url) return url ?? undefined;
+    const lastHttps = url.lastIndexOf("https://");
+    const lastHttp = url.lastIndexOf("http://");
+    const lastProtocolIndex = Math.max(lastHttps, lastHttp);
+    if (lastProtocolIndex > 0) {
+      return url.slice(lastProtocolIndex);
+    }
+    return url;
+  };
   const renderVisitStates = (
     extensionist: Extensionist,
     key: "survey_1" | "survey_2" | "survey_3",
@@ -956,10 +966,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   );
   const photoGallery = (
     [
-      { label: "Foto del productor", url: visitDetail?.photo_user },
-      { label: "Foto de interacción", url: visitDetail?.photo_interaction },
-      { label: "Panorama", url: visitDetail?.photo_panorama },
-      { label: "Foto adicional", url: visitDetail?.phono_extra_1 },
+      { label: "Foto del productor", url: normalizeMediaUrl(visitDetail?.photo_user) },
+      { label: "Foto de interacción", url: normalizeMediaUrl(visitDetail?.photo_interaction) },
+      { label: "Panorama", url: normalizeMediaUrl(visitDetail?.photo_panorama) },
+      { label: "Foto adicional", url: normalizeMediaUrl(visitDetail?.phono_extra_1) },
     ] as const
   )
     .filter((photo) => Boolean(photo.url))
@@ -2343,7 +2353,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                               {visit?.file_pdf ? (
                                                 <a
                                                   className="font-semibold text-emerald-700 hover:text-emerald-900"
-                                                  href={visit.file_pdf as string}
+                                                  href={normalizeMediaUrl(visit.file_pdf as string)}
                                                   target="_blank"
                                                   rel="noreferrer"
                                                 >
@@ -3071,7 +3081,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                           {visitDetail?.file_pdf ? (
                             <a
                               className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300"
-                              href={visitDetail.file_pdf as string}
+                              href={normalizeMediaUrl(visitDetail.file_pdf as string)}
                               target="_blank"
                               rel="noreferrer"
                             >
