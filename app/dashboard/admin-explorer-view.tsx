@@ -120,7 +120,7 @@ const FieldInput = ({
   label: string;
   value?: string | number | null;
   onChange?: (next: string) => void;
-  type?: "text" | "textarea" | "select";
+  type?: "text" | "textarea" | "select" | "date";
   placeholder?: string;
   options?: string[];
   readOnly?: boolean;
@@ -165,6 +165,7 @@ const FieldInput = ({
       ) : (
         <input
           className={`${baseClasses} mt-2 ${readOnly ? disabledClasses : ""}`}
+          type={type === "date" ? "date" : "text"}
           value={value ?? ""}
           placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
@@ -996,7 +997,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   );
   const classificationTotal = visitDetail?.classification_user?.total;
   const focalizationEntries = Object.entries(
-    visitDetail?.medition_focalization ?? {},
+    (editableVisit as any)?.medition_focalization ??
+      visitDetail?.medition_focalization ??
+      {},
   );
   const photoGallery = (
     [
@@ -3651,25 +3654,25 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 key={key}
                                 className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3"
                               >
-                                <div className="flex items-center justify-between">
-                                  <p className="text-sm font-semibold text-emerald-900">
-                                    {prettifyKey(key)}
-                                  </p>
-                                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
-                                    Puntaje: {value?.score ?? "N/D"}
-                                  </span>
-                                </div>
-                                <FieldInput
-                                  label="Observación"
-                                  type="textarea"
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-sm font-semibold text-emerald-900">
+                                      {prettifyKey(key)}
+                                    </p>
+                                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                                    Puntaje: {(value as any)?.score ?? "N/D"}
+                                    </span>
+                                  </div>
+                                  <FieldInput
+                                    label="Observación"
+                                    type="textarea"
                                   value={(value as any)?.obervation ?? ""}
                                   onChange={(v) => updateFocalizationObservation(key, v)}
                                   placeholder="Agregar observación"
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        </SectionCard>
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </SectionCard>
                       ) : null}
 
                             <SectionCard number="6." title="Datos del Acompañamiento">
@@ -3693,6 +3696,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   value={(editableVisit?.visit_date as string) ?? ""}
                                   onChange={(v) => updateVisitField("visit_date", v)}
                                   placeholder="AAAA-MM-DD"
+                                  type="date"
                                 />
                                 <FieldInput
                                   label="Nombre Persona quien atiende el Acompañamiento"
