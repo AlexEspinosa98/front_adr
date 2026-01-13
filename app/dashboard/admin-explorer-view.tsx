@@ -1049,6 +1049,22 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     setEditableVisit((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
+  const updateFocalizationObservation = (focalKey: string, value: string) => {
+    clearUpdateFeedback();
+    setEditableVisit((prev) => {
+      if (!prev) return prev;
+      const current = (prev as any).medition_focalization ?? {};
+      const entry = current[focalKey] ?? {};
+      return {
+        ...prev,
+        medition_focalization: {
+          ...current,
+          [focalKey]: { ...entry, obervation: value },
+        },
+      };
+    });
+  };
+
   const updateProducerField = (key: string, value: string) => {
     clearUpdateFeedback();
     setEditableProducer((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -3630,27 +3646,31 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             {focalizationEntries.length > 0 ? (
                               <SectionCard number="5.6" title="Medición y focalización">
                                 <div className="grid gap-3 md:grid-cols-2">
-                                  {focalizationEntries.map(([key, value]) => (
-                                    <div
-                                      key={key}
-                                      className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3"
-                                    >
-                                      <div className="flex items-center justify-between">
-                                        <p className="text-sm font-semibold text-emerald-900">
-                                          {prettifyKey(key)}
-                                        </p>
-                                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
-                                          Puntaje: {value?.score ?? "N/D"}
-                                        </span>
-                                      </div>
-                                      <p className="mt-2 text-sm text-emerald-700">
-                                        {value?.obervation ?? "Sin observación registrada."}
-                                      </p>
-                                    </div>
-                                  ))}
+                            {focalizationEntries.map(([key, value]) => (
+                              <div
+                                key={key}
+                                className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-semibold text-emerald-900">
+                                    {prettifyKey(key)}
+                                  </p>
+                                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                                    Puntaje: {value?.score ?? "N/D"}
+                                  </span>
                                 </div>
-                              </SectionCard>
-                            ) : null}
+                                <FieldInput
+                                  label="Observación"
+                                  type="textarea"
+                                  value={(value as any)?.obervation ?? ""}
+                                  onChange={(v) => updateFocalizationObservation(key, v)}
+                                  placeholder="Agregar observación"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </SectionCard>
+                      ) : null}
 
                             <SectionCard number="6." title="Datos del Acompañamiento">
                               <div className="grid gap-2 lg:grid-cols-3">
@@ -3670,7 +3690,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 />
                                 <FieldInput
                                   label="Fecha de la visita"
-                                  value={formatDate(editableVisit?.visit_date as string)}
+                                  value={(editableVisit?.visit_date as string) ?? ""}
                                   onChange={(v) => updateVisitField("visit_date", v)}
                                   placeholder="AAAA-MM-DD"
                                 />
@@ -3737,20 +3757,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   readOnly
                                 />
                                 <FieldInput
-                                  label="Identificación Del Extensionista"
-                                  value={visitExtensionist?.identification as string}
-                                  readOnly
-                                />
-                                <FieldInput
-                                  label="Fecha firma extensionista"
-                                  value={
-                                    formatDate(
-                                      (visitDetail?.date_hour_end as string) ??
-                                      (visitDetail?.date_acompanamiento as string),
-                                    ) ?? ""
-                                  }
-                                  readOnly
-                                />
+                              label="Identificación Del Extensionista"
+                              value={visitExtensionist?.identification as string}
+                              readOnly
+                            />
                                 <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
                                   <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
                                     Firma extensionista
