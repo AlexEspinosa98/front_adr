@@ -3716,15 +3716,6 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                             <SectionCard number="6." title="Datos del Acompañamiento">
                               <div className="grid gap-2 lg:grid-cols-3">
                                 <FieldInput
-                                  label="Fecha y hora registro Acompañamiento (automática)"
-                                  value={
-                                    editableVisit?.date_acompanamiento
-                                      ? `${formatDate(editableVisit.date_acompanamiento as string)} ${editableVisit.hour_acompanamiento ?? ""}`.trim()
-                                      : "Sin fecha"
-                                  }
-                                  readOnly
-                                />
-                                <FieldInput
                                   label="Origen registro"
                                   value="app_movil"
                                   readOnly
