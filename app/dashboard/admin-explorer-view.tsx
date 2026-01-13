@@ -797,6 +797,13 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     return time ? `${datePart} ${time}`.trim() : datePart;
   };
 
+  const formatVisitStamp = (value?: string | null) => {
+    const datePart = getDatePart(value);
+    if (!datePart) return undefined;
+    const timePart = getTimePart(value);
+    return formatDateWithTime(datePart, timePart ?? undefined);
+  };
+
   const getDatePart = (value?: string | null) => {
     if (!value) return "";
     // Try direct YYYY-MM-DD
@@ -3286,9 +3293,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   </span>
                                   <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-white ring-1 ring-white/20">
                                     Registro:{" "}
-                                    {editableVisit?.date_acompanamiento
-                                      ? `${formatDate(editableVisit.date_acompanamiento as string)} ${editableVisit.hour_acompanamiento ?? ""}`.trim()
-                                      : "Sin fecha"}
+                                    {formatVisitStamp(
+                                      (editableVisit as any)?.date_hour_end ??
+                                        (editableVisit as any)?.visit_date,
+                                    ) ?? "Sin fecha en la visita"}
                                   </span>
                                 </div>
                               </div>
