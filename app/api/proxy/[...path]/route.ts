@@ -14,6 +14,11 @@ async function forward(request: NextRequest) {
       targetPath = `${targetPath}/`;
     }
   }
+  if (/\/admin\/surveys\/\d+\/\d+\/state\/?$/.test(targetPath)) {
+    if (!targetPath.endsWith("/")) {
+      targetPath = `${targetPath}/`;
+    }
+  }
   const targetUrl = `${API_BASE_URL}${targetPath}${request.nextUrl.search}`;
 
   const headers = new Headers();

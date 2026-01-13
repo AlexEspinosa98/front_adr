@@ -525,6 +525,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     isError: propertiesError,
     error: propertiesFetchError,
     isFetching: propertiesFetching,
+    refetch: refetchExtensionistSummary,
   } = useQuery({
     queryKey: [
       "extensionist-summary",
@@ -786,38 +787,28 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
 
   const formatDate = (value?: string | null) => {
     if (!value) return undefined;
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString();
+    const dateMatch = value.match(/(\d{4}-\d{2}-\d{2})/);
+    return dateMatch ? dateMatch[1] : value;
   };
 
   const formatDateWithTime = (date?: string | null, time?: string | null) => {
-    if (!date) return undefined;
-    const parsed = new Date(date);
-    const datePart = Number.isNaN(parsed.getTime())
-      ? date
-      : parsed.toLocaleDateString();
+    const datePart = formatDate(date);
+    if (!datePart) return undefined;
     return time ? `${datePart} ${time}`.trim() : datePart;
   };
 
   const getDatePart = (value?: string | null) => {
     if (!value) return "";
-    const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) {
-      return date.toISOString().slice(0, 10);
-    }
-    // fallback if value already YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-    return "";
+    // Try direct YYYY-MM-DD
+    const dateMatch = value.match(/(\d{4}-\d{2}-\d{2})/);
+    return dateMatch ? dateMatch[1] : "";
   };
 
   const getTimePart = (value?: string | null) => {
     if (!value) return "";
-    // if separate HH:MM already
+    const timeMatch = value.match(/T(\d{2}:\d{2})/);
+    if (timeMatch) return timeMatch[1];
     if (/^\d{2}:\d{2}/.test(value)) return value.slice(0, 5);
-    const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) {
-      return date.toISOString().slice(11, 16);
-    }
     return "";
   };
 
@@ -1081,12 +1072,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     const currentTime =
       time ?? getTimePart((editableVisit as any)?.date_hour_end ?? (editableVisit as any)?.visit_date);
     if (!currentDate) return;
-    const iso = `${currentDate}T${(currentTime || "00:00").padStart(5, "0")}:00Z`;
+    const localStamp = `${currentDate}T${(currentTime || "00:00").padStart(5, "0")}:00`;
     setEditableVisit((prev) =>
       prev
         ? {
             ...prev,
-            date_hour_end: iso,
+            date_hour_end: localStamp,
           }
         : prev,
     );
@@ -1266,7 +1257,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
         setEditableVisit(response.data as Record<string, unknown>);
         setVisitDecision(state);
       }
-      refetchSurveyVisit();
+      await refetchSurveyVisit();
+      if (selectedExtensionist) {
+        await refetchExtensionistSummary();
+      }
     } catch (error: unknown) {
       const message = getErrorMessage(error, "No fue posible actualizar el estado.");
       setDecisionError(message);
