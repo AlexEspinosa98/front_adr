@@ -120,7 +120,7 @@ const FieldInput = ({
   label: string;
   value?: string | number | null;
   onChange?: (next: string) => void;
-  type?: "text" | "textarea" | "select" | "date";
+  type?: "text" | "textarea" | "select" | "date" | "time";
   placeholder?: string;
   options?: string[];
   readOnly?: boolean;
@@ -165,7 +165,7 @@ const FieldInput = ({
       ) : (
         <input
           className={`${baseClasses} mt-2 ${readOnly ? disabledClasses : ""}`}
-          type={type === "date" ? "date" : "text"}
+          type={type === "date" ? "date" : type === "time" ? "time" : "text"}
           value={value ?? ""}
           placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
@@ -799,6 +799,28 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     return time ? `${datePart} ${time}`.trim() : datePart;
   };
 
+  const getDatePart = (value?: string | null) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString().slice(0, 10);
+    }
+    // fallback if value already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+    return "";
+  };
+
+  const getTimePart = (value?: string | null) => {
+    if (!value) return "";
+    // if separate HH:MM already
+    if (/^\d{2}:\d{2}/.test(value)) return value.slice(0, 5);
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString().slice(11, 16);
+    }
+    return "";
+  };
+
   const CLASSIFICATION_LABELS: Record<string, string> = {
     main_productive_activity: "Actividad productiva principal",
     secondary_productive_activities: "Actividades productivas secundarias",
@@ -1052,6 +1074,24 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     setEditableVisit((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
+  const updateVisitDateTime = (date?: string, time?: string) => {
+    const currentDate =
+      date ??
+      getDatePart((editableVisit as any)?.date_hour_end ?? (editableVisit as any)?.visit_date);
+    const currentTime =
+      time ?? getTimePart((editableVisit as any)?.date_hour_end ?? (editableVisit as any)?.visit_date);
+    if (!currentDate) return;
+    const iso = `${currentDate}T${(currentTime || "00:00").padStart(5, "0")}:00Z`;
+    setEditableVisit((prev) =>
+      prev
+        ? {
+            ...prev,
+            date_hour_end: iso,
+          }
+        : prev,
+    );
+  };
+
   const updateFocalizationObservation = (focalKey: string, value: string) => {
     clearUpdateFeedback();
     setEditableVisit((prev) => {
@@ -1118,8 +1158,6 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       "observations_visited",
       "compliance_status",
       "visit_date",
-      "date_acompanamiento",
-      "hour_acompanamiento",
       "date_hour_end",
       "origen_register",
       "name_acompanamiento",
@@ -3691,13 +3729,28 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   value="app_movil"
                                   readOnly
                                 />
-                                <FieldInput
-                                  label="Fecha de la visita"
-                                  value={(editableVisit?.visit_date as string) ?? ""}
-                                  onChange={(v) => updateVisitField("visit_date", v)}
-                                  placeholder="AAAA-MM-DD"
-                                  type="date"
-                                />
+                            <FieldInput
+                              label="Fecha de la visita"
+                              value={
+                                getDatePart(
+                                  (editableVisit as any)?.date_hour_end ??
+                                    (editableVisit as any)?.visit_date,
+                                ) ?? ""
+                              }
+                              onChange={(v) => updateVisitDateTime(v, undefined)}
+                              placeholder="AAAA-MM-DD"
+                              type="date"
+                            />
+                            <FieldInput
+                              label="Hora de la visita"
+                              value={getTimePart(
+                                (editableVisit as any)?.date_hour_end ??
+                                  (editableVisit as any)?.visit_date,
+                              )}
+                              onChange={(v) => updateVisitDateTime(undefined, v)}
+                              placeholder="HH:MM"
+                              type="time"
+                            />
                                 <FieldInput
                                   label="Nombre Persona quien atiende el Acompañamiento"
                                   value={
