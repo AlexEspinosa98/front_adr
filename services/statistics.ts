@@ -149,11 +149,15 @@ export const exportSurveyExcel = async ({
   token,
   tokenType = "Token",
 }: ExportSurveyExcelParams) => {
-  const params = new URLSearchParams();
-  if (state) params.append("state", state);
-  if (city) params.append("city", city);
-  const url = `/admin/surveys/export-excel${params.toString() ? `?${params.toString()}` : ""}`;
-  const response = await httpClient.get<Blob>(url, {
+  // Normalize to NFC so tildes/acentos are encoded consistently when hitting the API.
+  const normalizedState = state?.normalize("NFC");
+  const normalizedCity = city?.normalize("NFC");
+
+  const response = await httpClient.get<Blob>("/admin/surveys/export-excel", {
+    params: {
+      ...(normalizedState ? { state: normalizedState } : {}),
+      ...(normalizedCity ? { city: normalizedCity } : {}),
+    },
     responseType: "blob",
     headers:
       token && tokenType
