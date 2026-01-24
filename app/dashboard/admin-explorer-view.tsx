@@ -1510,12 +1510,21 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     const file = files?.[0];
     setUpdateFiles((prev) => ({ ...prev, [key]: file || undefined }));
   };
-  const selectedDepartment =
+  const matchedDepartment =
     typeof editableProperty?.state === "string"
-      ? (editableProperty.state as (typeof DEPARTMENTS)[number])
+      ? DEPARTMENTS.find(
+          (dep) => dep.toLowerCase() === (editableProperty.state as string).toLowerCase(),
+        ) ?? (editableProperty.state as string)
       : undefined;
+  const departmentOptions = Array.from(
+    new Set([...(DEPARTMENTS as readonly string[]), ...(matchedDepartment ? [matchedDepartment] : [])]),
+  );
   const availableMunicipalities =
-    MUNICIPALITIES[selectedDepartment ?? "Magdalena"] ?? [];
+    matchedDepartment && MUNICIPALITIES[matchedDepartment as keyof typeof MUNICIPALITIES]
+      ? MUNICIPALITIES[matchedDepartment as keyof typeof MUNICIPALITIES]
+      : editableProperty?.municipality
+        ? [editableProperty.municipality]
+        : [];
   const { mutateAsync: mutateSurveyState, isPending: decisionLoading } = useMutation({
     mutationFn: updateSurveyState,
   });
