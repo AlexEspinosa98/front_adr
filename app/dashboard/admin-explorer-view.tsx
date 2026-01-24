@@ -4,6 +4,7 @@ import {
   FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -29,6 +30,7 @@ import {
   FiFileText,
   FiExternalLink,
   FiMenu,
+  FiRefreshCcw,
 } from "react-icons/fi";
 
 import {
@@ -38,8 +40,10 @@ import {
 } from "@/services/extensionists";
 import {
   ExtensionistProperty,
-  fetchPropertySurveyVisit,
-  fetchExtensionistSummary,
+  ExtensionistProducer,
+  ExtensionistProducerProperty,
+  fetchProducerSurveyVisit,
+  fetchExtensionistProducers,
   SurveysStateSummaryBucket,
   SurveysStateSummary,
   type PropertySurveyVisit,
@@ -284,6 +288,7 @@ type SurveySummaryEntry = {
   count?: number;
   latest_visit?: string | null;
   file_pdf?: string | null;
+  states?: string[];
 };
 type VisitExtensionist = {
   name?: string;
@@ -344,6 +349,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   const [editableProperty, setEditableProperty] =
     useState<EditablePropertyState>(null);
   const [approvalProfile, setApprovalProfile] = useState("");
+  const [selectedProfileName, setSelectedProfileName] = useState("");
   const [decisionReason, setDecisionReason] = useState("");
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
@@ -369,7 +375,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   const [reportNameFilter, setReportNameFilter] = useState("");
   const [reportEmailFilter, setReportEmailFilter] = useState("");
   const [reportPage, setReportPage] = useState(1);
-  const [reportExpandedPropertyId, setReportExpandedPropertyId] = useState<number | null>(null);
+  const [reportExpandedProducerId, setReportExpandedProducerId] = useState<number | null>(null);
   const [reportExporting, setReportExporting] = useState(false);
   const [reportExportError, setReportExportError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"stats" | "visits" | "reports">(
@@ -377,11 +383,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [expandedPropertyId, setExpandedPropertyId] = useState<number | null>(
-    null,
-  );
-  const [propertySearch, setPropertySearch] = useState("");
-  const [propertyPage, setPropertyPage] = useState(1);
+  const [selectedProducer, setSelectedProducer] = useState<ExtensionistProducer | null>(null);
+  const [expandedProducerId, setExpandedProducerId] = useState<number | null>(null);
+  const [producerSearch, setProducerSearch] = useState("");
+  const [producerPage, setProducerPage] = useState(1);
   const {
     data: statsResponse,
     isLoading: statsLoading,
@@ -416,15 +421,17 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     setEditableProducer(null);
     setEditableProperty(null);
     setApprovalProfile("");
+    setSelectedProfileName("");
     setDecisionReason("");
     setDecisionError(null);
     setUpdateMessage(null);
     setUpdateError(null);
     setUpdateFiles({});
-    setExpandedPropertyId(null);
-    setReportExpandedPropertyId(null);
-    setPropertySearch("");
-    setPropertyPage(1);
+    setSelectedProducer(null);
+    setExpandedProducerId(null);
+    setReportExpandedProducerId(null);
+    setProducerSearch("");
+    setProducerPage(1);
   };
 
   const handleFilterSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -520,21 +527,21 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   };
 
   const {
-    data: extensionistSummaryResponse,
-    isLoading: propertiesLoading,
-    isError: propertiesError,
-    error: propertiesFetchError,
-    isFetching: propertiesFetching,
-    refetch: refetchExtensionistSummary,
+    data: extensionistProducersResponse,
+    isLoading: producersLoading,
+    isError: producersError,
+    error: producersFetchError,
+    isFetching: producersFetching,
+    refetch: refetchExtensionistProducers,
   } = useQuery({
     queryKey: [
-      "extensionist-summary",
+      "extensionist-producers",
       selectedExtensionist?.id,
       accessToken,
       tokenType,
     ],
     queryFn: () =>
-      fetchExtensionistSummary(selectedExtensionist!.id, accessToken, tokenType),
+      fetchExtensionistProducers(selectedExtensionist!.id, accessToken, tokenType),
     enabled: Boolean(selectedExtensionist && accessToken),
   });
 
@@ -547,20 +554,20 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     refetch: refetchSurveyVisit,
   } = useQuery({
     queryKey: [
-      "property-survey-visit",
-      selectedProperty?.id,
+      "producer-survey-visit",
+      selectedProducer?.id,
       selectedVisit,
       accessToken,
       tokenType,
     ],
     queryFn: () =>
-      fetchPropertySurveyVisit(
-        selectedProperty!.id,
+      fetchProducerSurveyVisit(
+        selectedProducer!.id,
         selectedVisit!,
         accessToken,
         tokenType,
       ),
-    enabled: Boolean(selectedProperty && selectedVisit && accessToken),
+    enabled: Boolean(selectedProducer && selectedVisit && accessToken),
   });
 
   const {
@@ -579,79 +586,112 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     mutationFn: exportSurveyExcel,
   });
 
-  const toStringOrUndefined = (value?: string | number | null) =>
-    value === undefined || value === null ? undefined : String(value);
-
-  const summaryData = extensionistSummaryResponse?.data;
+  const summaryData = extensionistProducersResponse?.data;
   const summaryExtensionist = summaryData?.extensionist as Extensionist | undefined;
-  const properties = (summaryData?.properties ?? []).map((prop) => {
-    const typedProp = prop as ExtensionistPropertyApi;
-    const countStates = (states?: string[]) =>
-      (states ?? []).reduce(
-        (acc, state) => {
-          if (state === "pending") acc.pending += 1;
-          if (state === "accepted") acc.accepted += 1;
-          if (state === "rejected") acc.rejected += 1;
-          return acc;
-        },
-        { pending: 0, accepted: 0, rejected: 0 },
-      );
-    const bucket1 = countStates(typedProp.surveys?.type_1?.states);
-    const bucket2 = countStates(typedProp.surveys?.type_2?.states);
-    const bucket3 = countStates(typedProp.surveys?.type_3?.states);
-    return {
-      id: typedProp.id,
-      name: typedProp.name,
-      city: typedProp.city,
-      municipality: typedProp.municipality,
-      state: typedProp.state,
-      village: typedProp.village,
-      primaryLine: typedProp.linea_productive_primary,
-      secondaryLine: typedProp.linea_productive_secondary,
-      areaInProduction: toStringOrUndefined(typedProp.area_in_production),
-      latitude: toStringOrUndefined(typedProp.latitude),
-      longitude: toStringOrUndefined(typedProp.longitude),
-      createdAt: typedProp.created_at,
-      asnm: typedProp.asnm,
-      surveysStateSummary: {
-        survey_1: bucket1,
-        survey_2: bucket2,
-        survey_3: bucket3,
-      } as SurveysStateSummary,
-      surveySummary: typedProp.surveys,
-    } as ExtensionistProperty;
-  });
-  const basePropertiesSummary: SurveysStateSummary = {
-    survey_1: { pending: 0, accepted: 0, rejected: 0 },
-    survey_2: { pending: 0, accepted: 0, rejected: 0 },
-    survey_3: { pending: 0, accepted: 0, rejected: 0 },
+  const producers = summaryData?.producers ?? [];
+  const baseSummaryBucket: SurveysStateSummaryBucket = {
+    pending: 0,
+    accepted: 0,
+    rejected: 0,
+    count: 0,
   };
-  const propertiesSummary =
+  const baseProducersSummary: SurveysStateSummary = {
+    survey_1: { ...baseSummaryBucket },
+    survey_2: { ...baseSummaryBucket },
+    survey_3: { ...baseSummaryBucket },
+  };
+  const producersSummary =
+    summaryData?.surveys_state_summary ??
     summaryData?.states_summary ??
-    properties.reduce<SurveysStateSummary>((acc, prop) => {
-      (["survey_1", "survey_2", "survey_3"] as const).forEach((key) => {
-        const bucket = prop.surveysStateSummary?.[key];
-        acc[key] = {
-          pending: (acc[key]?.pending ?? 0) + (bucket?.pending ?? 0),
-          accepted: (acc[key]?.accepted ?? 0) + (bucket?.accepted ?? 0),
-          rejected: (acc[key]?.rejected ?? 0) + (bucket?.rejected ?? 0),
-        };
-      });
-      return acc;
-    }, basePropertiesSummary);
-  const filteredProperties = properties.filter((property) =>
-    property.name.toLowerCase().includes(propertySearch.toLowerCase().trim()),
+    baseProducersSummary;
+  const filteredProducers = producers.filter((producer) =>
+    [producer.name, producer.identification, producer.phone]
+      .filter(Boolean)
+      .some((field) =>
+        String(field ?? "")
+          .toLowerCase()
+          .includes(producerSearch.toLowerCase().trim()),
+      ),
   );
-  const propertiesPageSize = 5;
-  const propertiesTotalPages = Math.max(
+  const producerPageSize = 5;
+  const producersTotalPages = Math.max(
     1,
-    Math.ceil(filteredProperties.length / propertiesPageSize),
+    Math.ceil(filteredProducers.length / producerPageSize),
   );
-  const currentPropertyPageSafe = Math.min(propertyPage, propertiesTotalPages);
-  const paginatedProperties = filteredProperties.slice(
-    (currentPropertyPageSafe - 1) * propertiesPageSize,
-    currentPropertyPageSafe * propertiesPageSize,
+  const currentProducerPageSafe = Math.min(producerPage, producersTotalPages);
+  const paginatedProducers = filteredProducers.slice(
+    (currentProducerPageSafe - 1) * producerPageSize,
+    currentProducerPageSafe * producerPageSize,
   );
+  const normalizeProducerProperty = (
+    property?:
+      | ExtensionistProducerProperty
+      | ExtensionistProperty
+      | (Record<string, unknown> & { id?: number })
+      | null,
+  ): ExtensionistPropertyApi | null => {
+    if (!property) return null;
+    const raw = property as any;
+    const primaryLine =
+      raw.linea_productive_primary ?? raw.primaryLine ?? raw.lineaProductivePrimary;
+    const secondaryLine =
+      raw.linea_productive_secondary ?? raw.secondaryLine ?? raw.lineaProductiveSecondary;
+    const areaRaw = raw.area_in_production ?? raw.areaInProduction;
+    const lat = raw.latitude ?? raw.lat;
+    const lng = raw.longitude ?? raw.lng;
+    return {
+      id: raw.id ?? raw.property_id ?? 0,
+      name: raw.name ?? raw.property_name ?? "Predio sin nombre",
+      city: raw.city ?? raw.municipality,
+      municipality: raw.municipality ?? raw.city,
+      state: raw.state,
+      village: raw.village,
+      primaryLine,
+      secondaryLine,
+      linea_productive_primary: primaryLine,
+      linea_productive_secondary: secondaryLine,
+      areaInProduction:
+        areaRaw !== undefined && areaRaw !== null ? String(areaRaw) : undefined,
+      area_in_production: areaRaw,
+      latitude: lat !== undefined && lat !== null ? String(lat) : undefined,
+      longitude: lng !== undefined && lng !== null ? String(lng) : undefined,
+      asnm: raw.asnm,
+    };
+  };
+
+  const isSameProperty = (a?: unknown, b?: ExtensionistPropertyApi | null) => {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    const keys: Array<keyof ExtensionistPropertyApi> = [
+      "id",
+      "name",
+      "city",
+      "municipality",
+      "state",
+      "village",
+      "primaryLine",
+      "secondaryLine",
+      "linea_productive_primary",
+      "linea_productive_secondary",
+      "areaInProduction",
+      "area_in_production",
+      "latitude",
+      "longitude",
+      "asnm",
+    ];
+    return keys.every((key) => (a as any)[key] === (b as any)[key]);
+  };
+  const mapProducerPropertyToProperty = (
+    property?: ExtensionistProducerProperty | null,
+  ): ExtensionistPropertyApi | null => {
+    return normalizeProducerProperty(property);
+  };
+
+  const summarizeStatesArray = (states?: string[]) =>
+    (states ?? []).reduce<Record<string, number>>((acc, state) => {
+      acc[state] = (acc[state] ?? 0) + 1;
+      return acc;
+    }, {});
 
   const surveyStats = statsResponse?.data;
   const totals = surveyStats?.total_visits;
@@ -723,8 +763,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
 
   const handleExtensionistSelect = (extensionist: Extensionist) => {
     setSelectedExtensionist(extensionist);
-    setExpandedPropertyId(null);
-    setReportExpandedPropertyId(null);
+    setSelectedProducer(null);
+    setExpandedProducerId(null);
+    setReportExpandedProducerId(null);
     setSelectedProperty(null);
     setSelectedVisit(null);
     setVisitDecision(null);
@@ -738,10 +779,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     setUpdateMessage(null);
     setUpdateError(null);
     setUpdateFiles({});
-    setPropertySearch("");
-    setPropertyPage(1);
+    setProducerSearch("");
+    setProducerPage(1);
 
-    // Scroll to properties section after a short delay to ensure DOM update
+    // Scroll to productores section after a short delay to ensure DOM update
     setTimeout(() => {
       propertiesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
@@ -785,8 +826,24 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     [],
   );
 
+  const DISPLAY_OFFSET_MINUTES = -5 * 60; // UTC-5
+  const shiftToOffset = (value?: string | null) => {
+    if (!value) return null;
+    if (!value.includes("T")) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return new Date(parsed.getTime() + DISPLAY_OFFSET_MINUTES * 60 * 1000);
+  };
+
   const formatDate = (value?: string | null) => {
     if (!value) return undefined;
+    const shifted = shiftToOffset(value);
+    if (shifted) {
+      const yyyy = shifted.getUTCFullYear();
+      const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(shifted.getUTCDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
     const dateMatch = value.match(/(\d{4}-\d{2}-\d{2})/);
     return dateMatch ? dateMatch[1] : value;
   };
@@ -797,26 +854,38 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     return time ? `${datePart} ${time}`.trim() : datePart;
   };
 
-  const formatVisitStamp = (value?: string | null) => {
-    const datePart = getDatePart(value);
-    if (!datePart) return undefined;
-    const timePart = getTimePart(value);
-    return formatDateWithTime(datePart, timePart ?? undefined);
-  };
-
   const getDatePart = (value?: string | null) => {
     if (!value) return "";
-    // Try direct YYYY-MM-DD
+    const shifted = shiftToOffset(value);
+    if (shifted) {
+      const yyyy = shifted.getUTCFullYear();
+      const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(shifted.getUTCDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
     const dateMatch = value.match(/(\d{4}-\d{2}-\d{2})/);
     return dateMatch ? dateMatch[1] : "";
   };
 
   const getTimePart = (value?: string | null) => {
     if (!value) return "";
+    const shifted = shiftToOffset(value);
+    if (shifted) {
+      const hh = String(shifted.getUTCHours()).padStart(2, "0");
+      const mm = String(shifted.getUTCMinutes()).padStart(2, "0");
+      return `${hh}:${mm}`;
+    }
     const timeMatch = value.match(/T(\d{2}:\d{2})/);
     if (timeMatch) return timeMatch[1];
     if (/^\d{2}:\d{2}/.test(value)) return value.slice(0, 5);
     return "";
+  };
+
+  const formatVisitStamp = (value?: string | null) => {
+    const datePart = getDatePart(value);
+    if (!datePart) return undefined;
+    const timePart = getTimePart(value);
+    return formatDateWithTime(datePart, timePart ?? undefined);
   };
 
   const CLASSIFICATION_LABELS: Record<string, string> = {
@@ -852,13 +921,212 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     community_self_management: "Autogestión comunitaria",
   };
 
-  const prettifyKey = (key: string) =>
-    CLASSIFICATION_LABELS[key] ??
+  const FOCALIZATION_LABELS: Record<string, string> = {
+    productive_focus: "Enfoque productivo",
+    organizational_focus: "Enfoque organizacional",
+    commercial_focus: "Enfoque comercial",
+    social_focus: "Enfoque social",
+    gender_focus: "Enfoque de género",
+    youth_focus: "Enfoque de juventud",
+    victim_focus: "Enfoque de víctimas",
+    ethnic_focus: "Enfoque étnico",
+    disability_focus: "Enfoque discapacidad",
+    poverty_focus: "Enfoque pobreza",
+  };
+
+  const LABEL_OVERRIDES: Record<string, string> = {
+    ...CLASSIFICATION_LABELS,
+    ...FOCALIZATION_LABELS,
+    control_resources: "Control de recursos",
+    dialogue_knowledge: "Diálogo de conocimientos",
+    leadership_innovation: "Liderazgo e innovación",
+    voice_influence_decision: "Voz e influencia en la decisión",
+  };
+
+  const SPANISH_SEGMENT_MAP: Record<string, string> = {
+    access: "Acceso",
+    activities: "Actividades",
+    activity: "Actividad",
+    added: "Agregado",
+    adaptation: "Adaptación",
+    alliances: "Alianzas",
+    agricultural: "Agrícolas",
+    appropriation: "Apropiación",
+    banking: "Banca",
+    change: "Cambio",
+    climate: "Clima",
+    collective: "Colectiva",
+    commercial: "Comercial",
+    community: "Comunidad",
+    control: "Control",
+    credit: "Crédito",
+    decision: "Decisión",
+    decisions: "Decisiones",
+    disability: "Discapacidad",
+    environmental: "Ambiental",
+    ethnic: "Étnico",
+    focus: "Foco",
+    focalization: "Focalización",
+    good: "Buenas",
+    information: "Información",
+    intellectual: "Propiedad intelectual",
+    knowledge: "Conocimiento",
+    labor: "Mano de obra",
+    main: "Principal",
+    management: "Gestión",
+    markets: "Mercados",
+    mechanisms: "Mecanismos",
+    membership: "Pertenencia",
+    observation: "Observación",
+    organizational: "Organizacional",
+    participation: "Participación",
+    political: "Político",
+    poverty: "Pobreza",
+    practices: "Prácticas",
+    production: "Producción",
+    productive: "Productiva",
+    property: "Propiedad",
+    quality: "Calidad",
+    records: "Registros",
+    regulations: "Normatividad",
+    rural: "Rural",
+    secondary: "Secundaria",
+    self: "Auto",
+    skills: "Habilidades",
+    social: "Social",
+    social_control: "Control social",
+    sources: "Fuentes",
+    support: "Apoyo",
+    sustainable: "Sostenible",
+    sustainability: "Sostenibilidad",
+    technical: "Técnico",
+    tools: "Herramientas",
+    type: "Tipo",
+    up: "UP",
+    use: "Uso",
+    value: "Valor",
+    victim: "Víctima",
+    victims: "Víctimas",
+    vulnerability: "Vulnerabilidad",
+    women: "Mujeres",
+    woman: "Mujer",
+    youth: "Juventud",
+    young: "Joven",
+    ict: "TIC",
+  };
+
+  const PROFESSIONAL_PROFILES: Array<{ name: string; profile: string }> = [
+    { name: "Jhoana Ester Orjuela", profile: "Ing. Agrónomo" },
+    { name: "Anibal Trillos Sanchez", profile: "Técnico" },
+    { name: "Wilfrido José Roca Lanao", profile: "Ing. Agrónomo" },
+    { name: "Anyela Johana Camacho Muñoz", profile: "Ing. Agrónomo" },
+    { name: "Cristina Isabel Clavijo Duarte", profile: "Bióloga" },
+    { name: "Jose Albeiro Pallares Castaño", profile: "Ing. Agrónomo" },
+    { name: "Juana Iris Lineros", profile: "Ing. Ambiental" },
+    { name: "Edgardo Javier Vizcaino Rocha", profile: "Técnico Agropecuario" },
+    { name: "Luis Guillermo Calderón Seohanez", profile: "Medico Veterinario Y Zootecnista" },
+    { name: "Fredy De Jesus Mendoza Ballestas", profile: "Técnico Agropecuario" },
+    { name: "Jhonatan Smit Bolaño Domínguez", profile: "Biólogo" },
+    { name: "Alejandra Isabel Suarez Melendez", profile: "Ing. Ambiental" },
+    { name: "Luis Carlos Barros Restrepo", profile: "Medico Veterinario Y Zootecnista" },
+    { name: "Adalberto Valdez Buelvas", profile: "Tecnico En Produccion Agropecuaria" },
+    { name: "Sandra Milena Pérez López", profile: "Bióloga" },
+    { name: "NERANDIS RAFAEL PEREA ORTIZ", profile: "Técnico Profesional en Administración de Empresas Agropecuarias" },
+    { name: "ANGIE PATRICIA BARBOSA  GARCIA", profile: "Ing. Agrónomo" },
+    { name: "Karen Margarita Silva Benitez", profile: "Tecnólogo En Producción Agricola" },
+    { name: "Yuris German Beleño Ospino", profile: "Tecnico Agropecuario" },
+    { name: "Holmes Enrique Farelo Aroca", profile: "Medico Veterinario" },
+    { name: "BERLEDYS OLIVETT PEREZ FERNANDEZ", profile: "Tecnico" },
+    { name: "Pablo De La Cruz Toloza", profile: "Tecnico" },
+    { name: "Maryuris Castillo Carrasquilla", profile: "Ingeniera Ambiental" },
+    { name: "Fabio Manuel Bernal Cisneros", profile: "Tecnico Reproducción Animal" },
+    { name: "LUIS ESTEBAN MARRIAGA PIMIENTA", profile: "Medico Veterinario Y Zootecnista" },
+    { name: "MARCO  DAVID TOVAR OBREGON", profile: "Médico Veterinario" },
+    { name: "ENDER RAFAEL ALVAREZ BARROS", profile: "Médico Veterinario" },
+    { name: "RAMIRO DEL TORO", profile: "Médico Veterinario" },
+    { name: "Andrés Avelino Meza Orozco", profile: "Médico Veterinario Zootecnista" },
+    { name: "ANDRES CAMILO MAESTRE VIVES", profile: "Ing. Agrónomo" },
+    { name: "JUAN CAMILO  RONCALLO SALCEDO", profile: "Ing. Agrónomo" },
+    { name: "Aldo De Jesus Cormane Carranza", profile: "Técnologo Empresas Agropecuarias" },
+    { name: "FABIAN JESUS BALLESTA BRIEVA", profile: "Médico Veterinario" },
+    { name: "Misael Adolfo Rico Torregroza", profile: "Ing. Agrónomo" },
+    { name: "Julitza Marcela Fuentes Polo", profile: "Ing. Agrónomo" },
+    { name: "Eder Miguel Vizcaíno Acuña", profile: "Tecnólogo En Administración De Empresas Agropecuarias" },
+    { name: "Miguel Rafael Salas Romo", profile: "Ing. Agrónomo" },
+    { name: "Jose Eliecer Rodriguez Cera", profile: "Médico Veterinario Zootecnista" },
+    { name: "ELIANA DIAZ MARTINEZ", profile: "Tecnico En Administracion De Empresas Agropecuarias" },
+    { name: "Maria Concepcion Torregrosa Garcia", profile: "Tecnico En Administracion De Empresas Agropecuarias" },
+    { name: "Ana Maria Noguera Teran", profile: "Ing. Agrónomo" },
+    { name: "Alberto Movilla De La Cruz", profile: "Médico Veterinario" },
+    { name: "Jesus David Martinez Diaz", profile: "Ing. Agrónomo" },
+    { name: "Noelia Esster Correa Rodriguez", profile: "Tecnólogo En Administración De Empresas Agropecuarias" },
+    { name: "María Fernanda Díaz Correa", profile: "Técnico En Cultivos Vegetales" },
+    { name: "Betsy Maria Cadena López", profile: "Ing. Agrónomo" },
+    { name: "Hector Moreno Cantillo", profile: "Medico Veterinario Zootecnista" },
+    { name: "Elbanis Elena Bastidas Castrillo", profile: "Ing. Ambiental y Técnico en explotaciones agropecuarias" },
+    { name: "Andrea Patricia Turizo Quevedo", profile: "Ing. Agrónomo" },
+    { name: "Mario Fernández", profile: "Técnico Empresas Agropecuarias" },
+    { name: "Guido Patiño", profile: "Técnico Empresas Agropecuarias" },
+    { name: "Ivan Peña", profile: "Ing. Agroindustrial" },
+    { name: "Charol Caraballo", profile: "Ing. Agroindustrial" },
+    { name: "Oscar Polo", profile: "Ing. Agroindustrial" },
+    { name: "Miguel Olmos", profile: "Ing. Agroindustrial" },
+    { name: "Gladys Zabala", profile: "Ing. Ambiental" },
+    { name: "Marcel Valdez", profile: "Biólogo" },
+    { name: "Fredy Bula", profile: "Técnico Agropecuario" },
+    { name: "Pedro Medina", profile: "Médico Veterinario" },
+    { name: "Claudia Robles", profile: "Ing. Agroindustrial" },
+    { name: "Celina Correa", profile: "Ing. Agrónomo" },
+    { name: "Sugey Martínez", profile: "Médico Veterinario" },
+    { name: "Herwy Paternina", profile: "Zootecnista" },
+    { name: "Julia Villa", profile: "Técnico" },
+    { name: "Darío Pacheco", profile: "Ing. Agrónomo" },
+    { name: "José Arias", profile: "Tecnólogo en piscicultura" },
+    { name: "Enrique Barrios", profile: "Técnico Agropecuario" },
+    { name: "Alberto Oliveros", profile: "Técnico Agropecuario" },
+    { name: "Yohan Lechuga", profile: "Médico Veterinario" },
+  ];
+  const NAME_TO_PROFILE = PROFESSIONAL_PROFILES.reduce<Record<string, string>>(
+    (acc, item) => {
+      acc[item.name] = item.profile;
+      return acc;
+    },
+    {},
+  );
+  const UNIQUE_PROFILE_OPTIONS = Array.from(
+    new Set(PROFESSIONAL_PROFILES.map((item) => item.profile.trim()).filter(Boolean)),
+  );
+  const NAME_OPTIONS = Object.keys(NAME_TO_PROFILE);
+
+  const normalizeKey = (key: string) =>
     key
+      .trim()
+      .replace(/\s+/g, "_")
+      .replace(/-/g, "_")
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .toLowerCase();
+
+  const prettifyKey = (key: string) => {
+    const normalizedKey = normalizeKey(key);
+    const dictionaryLabel = LABEL_OVERRIDES[normalizedKey];
+    if (dictionaryLabel) return dictionaryLabel;
+
+    const label = normalizedKey
       .split("_")
-      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .filter(Boolean)
+      .map((segment) => {
+        const translatedSegment = SPANISH_SEGMENT_MAP[segment] ?? segment;
+        const cleanedSegment = translatedSegment.trim();
+        if (!cleanedSegment) return "";
+        return cleanedSegment.charAt(0).toUpperCase() + cleanedSegment.slice(1);
+      })
+      .filter(Boolean)
       .join(" ")
-      .replace("Ict", "ICT");
+      .replace(/\bTic\b/g, "TIC")
+      .replace(/\bUp\b/g, "UP");
+
+    return label;
+  };
   const normalizeMediaUrl = (url?: string | null) => {
     if (!url) return url ?? undefined;
     const lastHttps = url.lastIndexOf("https://");
@@ -1002,9 +1270,15 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
 
   const surveyVisitData = surveyVisitResponse?.data;
   const visitDetail = surveyVisitData?.surveys?.[0];
-  const visitPropertyData =
-    (surveyVisitData?.property as ExtensionistProperty | undefined) ??
-    selectedProperty;
+  const visitPropertyData = useMemo(
+    () =>
+      normalizeProducerProperty(
+        (surveyVisitData?.property as ExtensionistProperty | undefined) ??
+          (visitDetail?.property as ExtensionistProperty | undefined) ??
+          selectedProperty,
+      ),
+    [surveyVisitData?.property, visitDetail?.property, selectedProperty],
+  );
   const visitProducer = surveyVisitData?.producer as
     | Record<string, unknown>
     | undefined;
@@ -1058,8 +1332,21 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   }, [visitProducer]);
 
   useEffect(() => {
-    setEditableProperty(visitPropertyData ? { ...visitPropertyData } : null);
-    setInitialProperty(visitPropertyData ? { ...visitPropertyData } : null);
+    if (visitPropertyData) {
+      const mapped = { ...visitPropertyData } as ExtensionistPropertyApi & Record<string, unknown>;
+      setEditableProperty((prev) => (isSameProperty(prev, mapped) ? prev : mapped));
+      setInitialProperty((prev) => (isSameProperty(prev, mapped) ? prev : mapped));
+      if (mapped.id) {
+        setSelectedProperty((prev) =>
+          isSameProperty(prev as unknown, mapped)
+            ? prev
+            : (mapped as ExtensionistProperty),
+        );
+      }
+    } else {
+      setEditableProperty(null);
+      setInitialProperty(null);
+    }
   }, [visitPropertyData]);
 
   const clearUpdateFeedback = () => {
@@ -1266,7 +1553,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       }
       await refetchSurveyVisit();
       if (selectedExtensionist) {
-        await refetchExtensionistSummary();
+        await refetchExtensionistProducers();
       }
     } catch (error: unknown) {
       const message = getErrorMessage(error, "No fue posible actualizar el estado.");
@@ -1375,25 +1662,25 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
             <FiBarChart2
               className={activeView === "stats" ? "text-white" : "text-emerald-500"}
               aria-hidden
-            />
-            Estadística
-          </Link>
+              />
+              Estadística
+            </Link>
           {!isRestricted ? (
             <Link
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "visits"
                 ? "bg-emerald-900 text-white"
                 : "text-emerald-900 hover:bg-emerald-50"
                 }`}
-              href="/dashboard/visitas"
-            >
-              <FiActivity
-                className={
-                  activeView === "visits" ? "text-white" : "text-emerald-500"
-                }
-                aria-hidden
-              />
-              Revisión de visitas
-            </Link>
+            href="/dashboard/visitas"
+          >
+            <FiActivity
+              className={
+                activeView === "visits" ? "text-white" : "text-emerald-500"
+              }
+              aria-hidden
+            />
+            Revisión de visitas
+          </Link>
           ) : null}
           <Link
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${activeView === "reports"
@@ -1461,18 +1748,18 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                     ? "bg-emerald-900 text-white"
                     : "text-emerald-900 hover:bg-emerald-50"
                     }`}
-                  href="/dashboard/visitas"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <FiActivity
-                    className={
-                      activeView === "visits" ? "text-white" : "text-emerald-500"
-                    }
-                    aria-hidden
-                  />
-                  Revisión de visitas
-                </Link>
-              ) : null}
+                href="/dashboard/visitas"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <FiActivity
+                  className={
+                    activeView === "visits" ? "text-white" : "text-emerald-500"
+                  }
+                  aria-hidden
+                />
+                Revisión de visitas
+              </Link>
+            ) : null}
               <Link
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold transition ${activeView === "reports"
                   ? "bg-emerald-900 text-white"
@@ -1516,14 +1803,14 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                     {activeView === "stats"
                       ? "Resumen estadístico de encuestas"
                       : activeView === "visits"
-                        ? "Revisión de extensionistas"
+                        ? "Revisión de visitas"
                         : "Reporte de extensionista"}
                   </h1>
                   <p className="mt-2 md:mt-3 text-sm md:text-base text-emerald-200">
                     {activeView === "stats"
                       ? "Explora totales, cobertura y top extensionistas."
                       : activeView === "visits"
-                        ? "Busca extensionistas registrados y revisa sus datos básicos."
+                        ? "Busca extensionistas registrados y revisa sus visitas por productor."
                         : "Consulta el resumen de extensionistas y sus visitas."}
                   </p>
                 </div>
@@ -2278,15 +2565,15 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-emerald-900">
-                            Propiedades de {selectedExtensionist.name}
+                            Productores atendidos por {selectedExtensionist.name}
                           </p>
                           <p className="text-xs text-emerald-500">
-                            Estados por visita para el extensionista seleccionado.
+                            Estados por visita y PDF generado por tipo.
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                          {propertiesLoading || propertiesFetching ? (
-                            <p className="text-xs text-emerald-600">Cargando propiedades...</p>
+                          {producersLoading || producersFetching ? (
+                            <p className="text-xs text-emerald-600">Cargando productores...</p>
                           ) : null}
                           <button
                             type="button"
@@ -2330,27 +2617,27 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                           ) : null}
                         </div>
                       </div>
-                      {propertiesError ? (
+                      {producersError ? (
                         <p className="mt-2 text-sm text-red-600">
-                          {propertiesFetchError?.message ?? "No fue posible cargar las propiedades."}
+                          {producersFetchError?.message ?? "No fue posible cargar los productores."}
                         </p>
-                      ) : properties.length > 0 ? (
+                      ) : producers.length > 0 ? (
                         <div className="mt-3 space-y-3">
-                          {properties.map((property) => {
-                            const isExpanded = reportExpandedPropertyId === property.id;
+                          {producers.map((producer) => {
+                            const isExpanded = reportExpandedProducerId === producer.id;
                             return (
                               <div
-                                key={property.id}
+                                key={producer.id}
                                 className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3"
                               >
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <div>
                                     <p className="text-sm font-semibold text-emerald-900">
-                                      {property.name}
+                                      {producer.name}
                                     </p>
                                     <p className="text-xs text-emerald-600">
-                                      {property.city ?? property.municipality ?? "Ciudad N/D"} ·{" "}
-                                      {property.state ?? "Depto N/D"}
+                                      {producer.identification ?? "Sin identificación"} ·{" "}
+                                      {producer.phone ?? "Sin teléfono"}
                                     </p>
                                   </div>
                                   <div className="flex gap-2">
@@ -2364,7 +2651,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                             Visita {idx + 1}
                                           </p>
                                           {renderPropertyVisitStates(
-                                            property.surveysStateSummary?.[key],
+                                            producer.surveysStateSummary?.[key],
                                           )}
                                         </div>
                                       ),
@@ -2372,12 +2659,22 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   </div>
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2">
+                                  {producer.properties?.length ? (
+                                    <span className="rounded-md bg-white px-3 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                                      Predios:{" "}
+                                      {producer.properties.map((prop) => prop.name).join(", ")}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] text-emerald-500">
+                                      Sin predios registrados
+                                    </span>
+                                  )}
                                   <button
                                     type="button"
                                     className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
                                     onClick={() =>
-                                      setReportExpandedPropertyId(
-                                        isExpanded ? null : property.id,
+                                      setReportExpandedProducerId(
+                                        isExpanded ? null : producer.id,
                                       )
                                     }
                                   >
@@ -2389,77 +2686,86 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   </button>
                                 </div>
                                 {isExpanded ? (
-                                  <div className="mt-3 grid gap-2 rounded-lg border border-emerald-100 bg-white p-3 text-sm text-emerald-800 md:grid-cols-2">
-                                    <p>
-                                      <span className="font-semibold">Línea primaria:</span>{" "}
-                                      {property.primaryLine ?? "N/D"}
-                                    </p>
-                                    <p>
-                                      <span className="font-semibold">Línea secundaria:</span>{" "}
-                                      {property.secondaryLine ?? "N/D"}
-                                    </p>
-                                    <p>
-                                      <span className="font-semibold">Área en producción:</span>{" "}
-                                      {property.areaInProduction ?? "N/D"}
-                                    </p>
-                                    <p>
-                                      <span className="font-semibold">Coordenadas:</span>{" "}
-                                      {property.latitude ?? "N/D"},{" "}
-                                      {property.longitude ?? "N/D"}
-                                    </p>
-                                    <p>
-                                      <span className="font-semibold">ASNM:</span>{" "}
-                                      {property.asnm ?? "N/D"}
-                                    </p>
-                                    <p>
-                                      <span className="font-semibold">Creada:</span>{" "}
-                                      {property.createdAt
-                                        ? new Date(property.createdAt).toLocaleDateString()
-                                        : "N/D"}
-                                    </p>
-                                    <div className="md:col-span-2">
-                                      <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-                                        Visitas registradas
-                                      </p>
-                                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                                        {(["type_1", "type_2", "type_3"] as const).map((key, idx) => {
-                                          const visit = property.surveySummary?.[key] as
-                                            | SurveySummaryEntry
-                                            | undefined;
-                                          return (
+                                  <div className="mt-3 grid gap-2 rounded-lg border border-emerald-100 bg-white p-3 text-sm text-emerald-800 md:grid-cols-3">
+                                    {(["type_1", "type_2", "type_3"] as const).map((key, idx) => {
+                                      const visit = producer.surveySummary?.[key] as
+                                        | SurveySummaryEntry
+                                        | undefined;
+                                      const surveyKey = `survey_${idx + 1}` as keyof SurveysStateSummary;
+                                      const bucket = producer.surveysStateSummary?.[surveyKey];
+                                      const stateCounts = summarizeStatesArray(visit?.states);
+                                      return (
+                                        <div
+                                          key={key}
+                                          className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 text-xs"
+                                        >
+                                          <p className="font-semibold text-emerald-900">
+                                            Visita {idx + 1}
+                                          </p>
+                                          <p className="text-emerald-700">
+                                            Cantidad: {visit?.count ?? bucket?.count ?? 0}
+                                          </p>
+                                          <p className="text-emerald-700">
+                                            Última:{" "}
+                                            {visit?.latest_visit
+                                              ? formatDate(visit.latest_visit as string)
+                                              : "N/D"}
+                                          </p>
+                                          {visit?.file_pdf ? (
+                                            <a
+                                              className="font-semibold text-emerald-700 hover:text-emerald-900"
+                                              href={normalizeMediaUrl(visit.file_pdf as string)}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                            >
+                                              Ver PDF
+                                            </a>
+                                          ) : (
+                                            <p className="text-emerald-500">Sin PDF</p>
+                                          )}
+                                          {Object.keys(stateCounts).length > 0 ? (
+                                            <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-emerald-800">
+                                              {Object.entries(stateCounts).map(([state, count]) => (
+                                                <span
+                                                  key={state}
+                                                  className="rounded-full bg-white px-2 py-1 font-semibold ring-1 ring-emerald-100"
+                                                >
+                                                  {state}: {count}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      );
+                                    })}
+                                    {producer.properties?.length ? (
+                                      <div className="md:col-span-3">
+                                        <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                          Predios asociados
+                                        </p>
+                                        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                          {producer.properties.map((property) => (
                                             <div
-                                              key={key}
+                                              key={property.id}
                                               className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 text-xs"
                                             >
                                               <p className="font-semibold text-emerald-900">
-                                                Visita {idx + 1}
+                                                {property.name ?? "Predio sin nombre"}
                                               </p>
                                               <p className="text-emerald-700">
-                                                Cantidad: {visit?.count ?? 0}
+                                                {property.city ?? "Ciudad N/D"} ·{" "}
+                                                {property.state ?? "Depto N/D"}
                                               </p>
-                                              <p className="text-emerald-700">
-                                                Última:{" "}
-                                                {visit?.latest_visit
-                                                  ? formatDate(visit.latest_visit as string)
-                                                  : "N/D"}
-                                              </p>
-                                              {visit?.file_pdf ? (
-                                                <a
-                                                  className="font-semibold text-emerald-700 hover:text-emerald-900"
-                                                  href={normalizeMediaUrl(visit.file_pdf as string)}
-                                                  target="_blank"
-                                                  rel="noreferrer"
-                                                >
-                                                  Ver PDF
-                                                </a>
-                                              ) : (
-                                                <p className="text-emerald-500">Sin PDF</p>
-                                              )}
+                                              {property.village ? (
+                                                <p className="text-emerald-600">
+                                                  Vereda: {property.village}
+                                                </p>
+                                              ) : null}
                                             </div>
-                                          );
-                                        })}
+                                          ))}
+                                        </div>
                                       </div>
-                                    </div>
+                                    ) : null}
                                   </div>
                                 ) : null}
                               </div>
@@ -2468,7 +2774,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                         </div>
                       ) : (
                         <p className="mt-2 text-sm text-emerald-500">
-                          Este extensionista no tiene propiedades asociadas.
+                          Este extensionista no tiene productores asociados.
                         </p>
                       )}
                     </div>
@@ -2739,27 +3045,27 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
               <section ref={propertiesSectionRef} className={SECTION_CLASS}>
                 <SectionHeader
                   icon={<FiHome aria-hidden />}
-                  title="Propiedades del extensionista"
-                  description="Selecciona un extensionista y explora sus predios registrados."
+                  title="Revisión de visitas del extensionista"
+                  description="Productores atendidos y sus visitas registradas."
                 />
 
                 {!selectedExtensionist ? (
                   <p className="text-sm text-emerald-500">
-                    Selecciona un extensionista para ver sus propiedades.
+                    Selecciona un extensionista para ver sus visitas.
                   </p>
-                ) : propertiesLoading ? (
+                ) : producersLoading ? (
                   <>
                     <SkeletonPropertiesSummary />
                     <div className="mt-4">
                       <SkeletonPropertiesList count={4} />
                     </div>
                   </>
-                ) : properties.length > 0 ? (
+                ) : producers.length > 0 ? (
                   <>
-                    {propertiesSummary ? (
+                    {producersSummary ? (
                       <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
                         <p className="text-sm font-semibold text-emerald-900">
-                          Resumen de visitas en propiedades
+                          Resumen de visitas en productores
                         </p>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-emerald-600">
                           <span className="inline-flex items-center gap-1">
@@ -2778,7 +3084,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                         <div className="mt-3 grid gap-3 md:grid-cols-3">
                           {(["survey_1", "survey_2", "survey_3"] as const).map(
                             (key, idx) => {
-                              const bucket = propertiesSummary?.[key];
+                              const bucket = producersSummary?.[key];
                               return (
                                 <div
                                   key={key}
@@ -2827,40 +3133,45 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <input
                         className="w-full rounded-md border border-emerald-200 px-3 py-2 text-sm text-emerald-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 md:max-w-sm"
-                        placeholder="Buscar propiedad por nombre"
-                        value={propertySearch}
+                        placeholder="Buscar por nombre, cédula o teléfono"
+                        value={producerSearch}
                         onChange={(e) => {
-                          setPropertySearch(e.target.value);
-                          setPropertyPage(1);
+                          setProducerSearch(e.target.value);
+                          setProducerPage(1);
                         }}
                       />
                       <div className="flex items-center gap-2 text-xs text-emerald-600">
                         <span>
-                          Propiedades:{" "}
+                          Productores:{" "}
                           <strong className="text-emerald-900">
-                            {filteredProperties.length}
+                            {filteredProducers.length}
                           </strong>
                         </span>
                         <span className="hidden md:inline-block">·</span>
                         <span>
-                          Página {currentPropertyPageSafe} de {propertiesTotalPages}
+                          Página {currentProducerPageSafe} de {producersTotalPages}
                         </span>
                       </div>
                     </div>
 
                     <div className="space-y-3">
-                      {paginatedProperties.map((property) => {
-                        const isExpanded = expandedPropertyId === property.id;
+                      {paginatedProducers.map((producer) => {
+                        const isExpanded = expandedProducerId === producer.id;
+                        const defaultProperty = producer.properties?.[0];
+                        const normalizedProperty = mapProducerPropertyToProperty(defaultProperty);
+                        const primaryPropertyLabel = normalizedProperty
+                          ? `${normalizedProperty.name ?? "Predio sin nombre"} · ${normalizedProperty.city ?? "Ciudad N/D"}`
+                          : "Sin predio asociado";
                         return (
                           <div
                             className="rounded-xl border border-emerald-100 bg-white shadow-sm"
-                            key={property.id}
+                            key={producer.id}
                           >
                             <div
                               className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                               onClick={() =>
-                                setExpandedPropertyId(
-                                  isExpanded ? null : property.id,
+                                setExpandedProducerId(
+                                  isExpanded ? null : producer.id,
                                 )
                               }
                               role="button"
@@ -2868,20 +3179,44 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                               onKeyDown={(event) => {
                                 if (event.key === "Enter" || event.key === " ") {
                                   event.preventDefault();
-                                  setExpandedPropertyId(
-                                    isExpanded ? null : property.id,
+                                  setExpandedProducerId(
+                                    isExpanded ? null : producer.id,
                                   );
                                 }
                               }}
                             >
                               <div>
                                 <p className="text-base font-semibold text-emerald-900">
-                                  {property.name}
+                                  {producer.name}
                                 </p>
-                                <p className="text-sm text-emerald-500">
-                                  {property.city ?? property.municipality ?? "Ciudad N/D"} ·{" "}
-                                  {property.state ?? "Estado N/D"}
-                                </p>
+                                <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-emerald-600">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-800 ring-1 ring-emerald-100">
+                                    Propiedad: {normalizedProperty?.name ?? "Sin predio asociado"}
+                                  </span>
+                                  {normalizedProperty?.state ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                                      Depto: {normalizedProperty.state}
+                                    </span>
+                                  ) : null}
+                                  {normalizedProperty?.city ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                                      Municipio: {normalizedProperty.city}
+                                    </span>
+                                  ) : null}
+                                  {normalizedProperty?.village ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                                      Vereda: {normalizedProperty.village}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-2 text-[11px]">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                                    ID: {producer.identification ?? "N/D"}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                                    Tel: {producer.phone ?? "N/D"}
+                                  </span>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <div className="flex flex-col gap-1 text-right">
@@ -2899,7 +3234,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                             V{idx + 1}
                                           </p>
                                           {renderPropertyVisitStates(
-                                            property.surveysStateSummary?.[key],
+                                            producer.surveysStateSummary?.[key],
                                           )}
                                         </div>
                                       ),
@@ -2911,7 +3246,9 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                   type="button"
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    setSelectedProperty(property);
+                                    const mappedProperty = mapProducerPropertyToProperty(defaultProperty);
+                                    setSelectedProducer(producer);
+                                    setSelectedProperty(mappedProperty);
                                     setSelectedVisit(1);
                                     setVisitDecision(null);
                                     setShowClassificationDetail(false);
@@ -2919,19 +3256,20 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                     setEditableProducer(null);
                                     setEditableProperty(null);
                                     setApprovalProfile("");
+                                    setSelectedProfileName("");
                                     setDecisionReason("");
                                     setDecisionError(null);
                                     setUpdateMessage(null);
                                     setUpdateError(null);
                                     setUpdateFiles({});
-                                    setExpandedPropertyId(property.id);
+                                    setExpandedProducerId(producer.id);
                                     // Scroll to surveys section after a short delay
                                     setTimeout(() => {
                                       propertySurveysSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                                     }, 100);
                                   }}
                                 >
-                                  Encuestas
+                                  Ver visitas
                                 </button>
                                 <span
                                   className={`rounded-full border border-emerald-200 p-2 text-emerald-600 transition ${isExpanded ? "bg-emerald-50 rotate-90" : ""
@@ -2944,77 +3282,111 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
 
                             {isExpanded ? (
                               <div className="grid gap-3 border-t border-emerald-100 px-4 py-3 md:grid-cols-3">
-                                <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
-                                    Línea primaria
-                                  </p>
-                                  <p className="text-sm font-semibold text-emerald-900">
-                                    {property.primaryLine ?? "N/D"}
-                                  </p>
-                                  {property.secondaryLine ? (
-                                    <p className="text-xs text-emerald-500">
-                                      Secundaria: {property.secondaryLine}
+                                {(["type_1", "type_2", "type_3"] as const).map((key, idx) => {
+                                  const visit = producer.surveySummary?.[key] as
+                                    | SurveySummaryEntry
+                                    | undefined;
+                                  const surveyKey = `survey_${idx + 1}` as keyof SurveysStateSummary;
+                                  const bucket = producer.surveysStateSummary?.[surveyKey];
+                                  const stateCounts = summarizeStatesArray(visit?.states);
+                                  return (
+                                    <div
+                                      key={key}
+                                      className="rounded-lg bg-emerald-50 p-3 text-sm"
+                                    >
+                                      <p className="text-xs uppercase tracking-widest text-emerald-500">
+                                        Visita {idx + 1}
+                                      </p>
+                                      <p className="text-sm font-semibold text-emerald-900">
+                                        Cantidad: {visit?.count ?? bucket?.count ?? 0}
+                                      </p>
+                                      <p className="text-xs text-emerald-600">
+                                        Última:{" "}
+                                        {visit?.latest_visit
+                                          ? formatDate(visit.latest_visit as string)
+                                          : "N/D"}
+                                      </p>
+                                      {visit?.file_pdf ? (
+                                        <a
+                                          className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+                                          href={normalizeMediaUrl(visit.file_pdf as string)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          Ver PDF
+                                        </a>
+                                      ) : (
+                                        <p className="text-xs text-emerald-500">Sin PDF</p>
+                                      )}
+                                      {Object.keys(stateCounts).length > 0 ? (
+                                        <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-emerald-800">
+                                          {Object.entries(stateCounts).map(([state, count]) => (
+                                            <span
+                                              key={state}
+                                              className="rounded-full bg-white px-2 py-1 font-semibold ring-1 ring-emerald-100"
+                                            >
+                                              {state}: {count}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                                {producer.properties?.length ? (
+                                  <div className="md:col-span-3">
+                                    <p className="text-xs uppercase tracking-widest text-emerald-500">
+                                      Predios del productor
                                     </p>
-                                  ) : null}
-                                </div>
-                                <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
-                                    Vereda
-                                  </p>
-                                  <p className="text-sm font-semibold text-emerald-900">
-                                    {property.village ?? "N/D"}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
-                                    Área en producción
-                                  </p>
-                                  <p className="text-sm font-semibold text-emerald-900">
-                                    {property.areaInProduction ?? "N/D"} ha
-                                  </p>
-                                </div>
-                                <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
-                                    Coordenadas
-                                  </p>
-                                  <p className="text-sm font-semibold text-emerald-900">
-                                    {property.latitude ?? "N/D"},{" "}
-                                    {property.longitude ?? "N/D"}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg bg-emerald-50 p-3">
-                                  <p className="text-xs uppercase tracking-widest text-emerald-500">
-                                    Creado
-                                  </p>
-                                  <p className="text-sm font-semibold text-emerald-900">
-                                    {property.createdAt
-                                      ? new Date(property.createdAt).toLocaleDateString()
-                                      : "N/D"}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    className="inline-flex items-center gap-2 rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedProperty(property);
-                                      setSelectedVisit(1);
-                                      setVisitDecision(null);
-                                      setShowClassificationDetail(false);
-                                      setEditableVisit(null);
-                                      setEditableProducer(null);
-                                      setEditableProperty(null);
-                                      setApprovalProfile("");
-                                      setDecisionReason("");
-                                      setDecisionError(null);
-                                      setUpdateMessage(null);
-                                      setUpdateError(null);
-                                      setUpdateFiles({});
-                                    }}
-                                  >
-                                    Ver encuestas
-                                  </button>
-                                </div>
+                                    <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                      {producer.properties.map((property) => (
+                                        <div
+                                          key={property.id}
+                                          className="rounded-md border border-emerald-100 bg-white p-3 text-sm"
+                                        >
+                                          <p className="font-semibold text-emerald-900">
+                                            {property.name ?? "Predio sin nombre"}
+                                          </p>
+                                          <p className="text-xs text-emerald-600">
+                                            {property.city ?? "Ciudad N/D"} ·{" "}
+                                            {property.state ?? "Estado N/D"}
+                                          </p>
+                                          {property.village ? (
+                                            <p className="text-xs text-emerald-600">
+                                              Vereda: {property.village}
+                                            </p>
+                                          ) : null}
+                                          <button
+                                            className="mt-2 inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-[11px] font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900"
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedProducer(producer);
+                                              setSelectedProperty(mapProducerPropertyToProperty(property));
+                                              setSelectedVisit(1);
+                                              setVisitDecision(null);
+                                              setShowClassificationDetail(false);
+                                              setEditableVisit(null);
+                                              setEditableProducer(null);
+                                              setEditableProperty(null);
+                                              setApprovalProfile("");
+                                              setSelectedProfileName("");
+                                              setDecisionReason("");
+                                              setDecisionError(null);
+                                              setUpdateMessage(null);
+                                              setUpdateError(null);
+                                              setUpdateFiles({});
+                                              setTimeout(() => {
+                                                propertySurveysSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                              }, 100);
+                                            }}
+                                          >
+                                            Abrir visitas
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
                             ) : null}
                           </div>
@@ -3023,30 +3395,30 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                     </div>
                     <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <span className="text-xs text-emerald-600">
-                        Mostrando {paginatedProperties.length} de {filteredProperties.length} propiedades
+                        Mostrando {paginatedProducers.length} de {filteredProducers.length} productores
                       </span>
                       <div className="flex items-center gap-2">
                         <button
                           className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
                           type="button"
-                          disabled={currentPropertyPageSafe === 1}
+                          disabled={currentProducerPageSafe === 1}
                           onClick={() =>
-                            setPropertyPage((prev) => Math.max(1, prev - 1))
+                            setProducerPage((prev) => Math.max(1, prev - 1))
                           }
                         >
                           <FiChevronLeft aria-hidden />
                           Anterior
                         </button>
                         <span className="text-xs text-emerald-600">
-                          Página {currentPropertyPageSafe} de {propertiesTotalPages}
+                          Página {currentProducerPageSafe} de {producersTotalPages}
                         </span>
                         <button
                           className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
                           type="button"
-                          disabled={currentPropertyPageSafe === propertiesTotalPages}
+                          disabled={currentProducerPageSafe === producersTotalPages}
                           onClick={() =>
-                            setPropertyPage((prev) =>
-                              Math.min(propertiesTotalPages, prev + 1),
+                            setProducerPage((prev) =>
+                              Math.min(producersTotalPages, prev + 1),
                             )
                           }
                         >
@@ -3058,12 +3430,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                   </>
                 ) : (
                   renderListState({
-                    isLoading: propertiesLoading,
-                    isFetching: propertiesFetching,
-                    isError: propertiesError,
-                    errorMessage: propertiesFetchError?.message,
+                    isLoading: producersLoading,
+                    isFetching: producersFetching,
+                    isError: producersError,
+                    errorMessage: producersFetchError?.message,
                     emptyLabel:
-                      "Selecciona un extensionista para mostrar sus propiedades.",
+                      "Selecciona un extensionista para mostrar sus productores.",
                   })
                 )}
               </section>
@@ -3071,30 +3443,45 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
               <section ref={propertySurveysSectionRef} className={SECTION_CLASS}>
                 <SectionHeader
                   icon={<FiUsers aria-hidden />}
-                  title="Encuestas de la propiedad"
-                  description="Selecciona una propiedad para habilitar las visitas."
+                  title="Visitas del productor"
+                  description="Selecciona un productor para revisar sus visitas."
                 />
 
-                {!selectedProperty ? (
+                {!selectedProducer ? (
                   <p className="text-sm text-emerald-500">
-                    Selecciona una propiedad para ver las visitas disponibles.
+                    Selecciona un productor para ver las visitas disponibles.
                   </p>
                 ) : (
                   <div className="space-y-4">
                     <div className="flex flex-col gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4 md:flex-row md:items-center md:justify-between">
                       <div>
                         <p className="text-xs uppercase tracking-[0.2em] text-emerald-500">
-                          Propiedad seleccionada
+                          Productor seleccionado
                         </p>
                         <p className="text-lg font-semibold text-emerald-900">
-                          {selectedProperty.name}
+                          {selectedProducer.name}
                         </p>
                         <p className="text-sm text-emerald-600">
-                          {selectedProperty.city ?? selectedProperty.municipality ?? "Ciudad N/D"} ·{" "}
-                          {selectedProperty.state ?? "Estado N/D"}
+                          ID: {selectedProducer.identification ?? "N/D"} · Tel:{" "}
+                          {selectedProducer.phone ?? "N/D"}
                         </p>
+                        {selectedProperty ? (
+                          <p className="text-xs text-emerald-500">
+                            Predio principal: {selectedProperty.name} ·{" "}
+                            {selectedProperty.city ?? selectedProperty.municipality ?? "Ciudad N/D"}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        <button
+                          className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300"
+                          type="button"
+                          onClick={() => refetchSurveyVisit()}
+                          disabled={surveyVisitLoading || surveyVisitFetching}
+                        >
+                          <FiRefreshCcw aria-hidden />
+                          {surveyVisitLoading || surveyVisitFetching ? "Recargando..." : "Recargar visita"}
+                        </button>
                         {[1, 2, 3].map((num) => {
                           const isActive = selectedVisit === num;
                           return (
@@ -3107,15 +3494,16 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                               type="button"
                               onClick={() => {
                                 setSelectedVisit(num);
-                                setVisitDecision(null);
-                                setShowClassificationDetail(false);
-                                setEditableVisit(null);
-                                setEditableProducer(null);
-                                setEditableProperty(null);
-                                setApprovalProfile("");
-                                setUpdateMessage(null);
-                                setUpdateError(null);
-                                setUpdateFiles({});
+      setVisitDecision(null);
+      setShowClassificationDetail(false);
+      setEditableVisit(null);
+      setEditableProducer(null);
+      setEditableProperty(null);
+      setApprovalProfile("");
+      setSelectedProfileName("");
+      setUpdateMessage(null);
+      setUpdateError(null);
+      setUpdateFiles({});
                               }}
                             >
                               Visita {num}
@@ -3219,9 +3607,36 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                               {updateError}
                             </span>
                           ) : null}
-                          <div className="w-full max-w-xs">
+                          <div className="flex w-full flex-col gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 p-3 md:max-w-2xl">
+                            <p className="text-xs font-semibold text-emerald-700">
+                              Perfil (elige de la lista o escribe manual)
+                            </p>
+                            <div className="grid gap-2 md:grid-cols-2">
+                              <FieldInput
+                                label="Elegir por nombre"
+                                type="select"
+                                options={["", ...NAME_OPTIONS]}
+                                value={selectedProfileName}
+                                onChange={(v) => {
+                                  setSelectedProfileName(v);
+                                  const profile = NAME_TO_PROFILE[v];
+                                  setApprovalProfile(profile ?? "");
+                                }}
+                              />
+                              <FieldInput
+                                label="Elegir por perfil"
+                                type="select"
+                                options={["", ...UNIQUE_PROFILE_OPTIONS]}
+                                value={
+                                  UNIQUE_PROFILE_OPTIONS.includes(approvalProfile)
+                                    ? approvalProfile
+                                    : ""
+                                }
+                                onChange={(v) => setApprovalProfile(v)}
+                              />
+                            </div>
                             <FieldInput
-                              label="Perfil (requerido para aceptar)"
+                              label="Perfil final"
                               value={approvalProfile}
                               onChange={(v) => setApprovalProfile(v)}
                               placeholder="Ingresa el perfil antes de aceptar"
@@ -3839,9 +4254,36 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 Acciones rápidas
                               </p>
                               <div className="grid gap-3 md:grid-cols-2">
-                                <div className="max-w-xs">
+                                <div className="flex flex-col gap-2 rounded-lg border border-emerald-100 bg-white p-3">
+                                  <p className="text-xs font-semibold text-emerald-700">
+                                    Perfil (elige de la lista o escribe manual)
+                                  </p>
+                                  <div className="grid gap-2 md:grid-cols-2">
+                                    <FieldInput
+                                      label="Elegir por nombre"
+                                      type="select"
+                                      options={["", ...NAME_OPTIONS]}
+                                      value={selectedProfileName}
+                                      onChange={(v) => {
+                                        setSelectedProfileName(v);
+                                        const profile = NAME_TO_PROFILE[v];
+                                        setApprovalProfile(profile ?? "");
+                                      }}
+                                    />
+                                    <FieldInput
+                                      label="Elegir por perfil"
+                                      type="select"
+                                      options={["", ...UNIQUE_PROFILE_OPTIONS]}
+                                      value={
+                                        UNIQUE_PROFILE_OPTIONS.includes(approvalProfile)
+                                          ? approvalProfile
+                                          : ""
+                                      }
+                                      onChange={(v) => setApprovalProfile(v)}
+                                    />
+                                  </div>
                                   <FieldInput
-                                    label="Perfil (requerido para aceptar)"
+                                    label="Perfil final"
                                     value={approvalProfile}
                                     onChange={(v) => setApprovalProfile(v)}
                                     placeholder="Ingresa el perfil antes de aceptar"

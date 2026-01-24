@@ -143,6 +143,47 @@ export interface ExtensionistSummaryResponse {
   };
 }
 
+export interface ExtensionistProducerProperty {
+  id: number;
+  name: string;
+  city?: string;
+  state?: string;
+  village?: string;
+}
+
+export interface ExtensionistProducerSurveySummary {
+  count?: number;
+  states?: string[];
+  latest_visit?: string | null;
+  file_pdf?: string | null;
+}
+
+export interface ExtensionistProducer {
+  id: number;
+  name: string;
+  phone?: string;
+  type_id?: string;
+  identification?: string;
+  properties?: ExtensionistProducerProperty[];
+  surveys?: {
+    type_1?: ExtensionistProducerSurveySummary;
+    type_2?: ExtensionistProducerSurveySummary;
+    type_3?: ExtensionistProducerSurveySummary;
+  };
+  surveysStateSummary?: SurveysStateSummary;
+  surveySummary?: ExtensionistProducer["surveys"];
+}
+
+export interface ExtensionistProducersResponse {
+  success?: boolean;
+  data?: {
+    extensionist?: Record<string, unknown>;
+    surveys_state_summary?: SurveysStateSummary;
+    states_summary?: SurveysStateSummary;
+    producers?: ExtensionistProducer[];
+  };
+}
+
 export const exportExtensionistExcel = async (
   extensionistId: number,
   token?: string,
@@ -180,6 +221,7 @@ export interface SurveysStateSummaryBucket {
   pending?: number;
   accepted?: number;
   rejected?: number;
+  count?: number;
 }
 
 export interface SurveysStateSummary {
@@ -350,6 +392,189 @@ export const fetchExtensionistSummary = async (
     },
   );
   return data;
+};
+
+export const fetchExtensionistProducers = async (
+  extensionistId: number,
+  token?: string,
+  tokenType: string = "Token",
+): Promise<ExtensionistProducersResponse> => {
+  const { data } = await httpClient.get<ExtensionistProducersResponse>(
+    `/admin/extensionists/${extensionistId}/producers`,
+    {
+      headers: authHeaders(token, tokenType),
+    },
+  );
+
+  const normalizeBucket = (bucket?: SurveysStateSummaryBucket): SurveysStateSummaryBucket => {
+    const pending = bucket?.pending ?? 0;
+    const accepted = bucket?.accepted ?? 0;
+    const rejected = bucket?.rejected ?? 0;
+    const count = bucket?.count ?? pending + accepted + rejected;
+    return { pending, accepted, rejected, count };
+  };
+
+  const normalizeSummary = (summary?: SurveysStateSummary): SurveysStateSummary => {
+    const keys: Array<keyof SurveysStateSummary> = ["survey_1", "survey_2", "survey_3", "total", "totals"];
+    return keys.reduce<SurveysStateSummary>((acc, key) => {
+      if (summary?.[key]) {
+        acc[key] = normalizeBucket(summary[key]);
+      }
+      return acc;
+    }, {});
+  };
+
+  const countStates = (states?: string[]) =>
+    (states ?? []).reduce(
+      (acc, state) => {
+        if (state === "pending") acc.pending += 1;
+        if (state === "accepted") acc.accepted += 1;
+        if (state === "rejected") acc.rejected += 1;
+        return acc;
+      },
+      { pending: 0, accepted: 0, rejected: 0 },
+    );
+
+  const producers = (data.data?.producers ?? []).map((producer) => {
+    const typed = producer as ExtensionistProducer & Record<string, any>;
+    const typeCounts = (key: "type_1" | "type_2" | "type_3") => {
+      const rawStates = typed.surveys?.[key]?.states;
+      const counted = countStates(rawStates);
+      const count =
+        typed.surveys?.[key]?.count ??
+        rawStates?.length ??
+        counted.pending + counted.accepted + counted.rejected;
+      return normalizeBucket({
+        pending: counted.pending,
+        accepted: counted.accepted,
+        rejected: counted.rejected,
+        count,
+      });
+    };
+
+    return {
+      id: typed.id ?? (typed as any).producer_id ?? 0,
+      name: typed.name ?? "Productor sin nombre",
+      phone: typed.phone ?? (typed as any).number_phone ?? undefined,
+      type_id: typed.type_id,
+      identification: typed.identification,
+      properties: (typed.properties ?? []).map((prop: any) => ({
+        id: prop.id ?? prop.property_id ?? 0,
+        name: prop.name ?? prop.property_name ?? "Predio sin nombre",
+        city: prop.city ?? prop.municipality,
+        state: prop.state,
+        village: prop.village,
+      })),
+      surveys: typed.surveys,
+      surveysStateSummary: {
+        survey_1: typeCounts("type_1"),
+        survey_2: typeCounts("type_2"),
+        survey_3: typeCounts("type_3"),
+      },
+      surveySummary: typed.surveys,
+    } as ExtensionistProducer;
+  });
+
+  const summary = normalizeSummary(
+    data.data?.surveys_state_summary ?? data.data?.states_summary,
+  );
+
+  return {
+    success: data.success,
+    data: {
+      extensionist: data.data?.extensionist,
+      surveys_state_summary: summary,
+      states_summary: summary,
+      producers,
+    },
+  };
+};
+
+export const fetchProducerSurveyVisit = async (
+  producerId: number,
+  surveyTypeId: number,
+  token?: string,
+  tokenType: string = "Token",
+): Promise<PropertySurveyVisitResponse> => {
+  const { data } = await httpClient.get<PropertySurveyVisitResponse>(
+    `/admin/producers/${producerId}/surveys/${surveyTypeId}`,
+    {
+      headers: authHeaders(token, tokenType),
+    },
+  );
+  const rawProperty =
+    (data.data as any)?.property ??
+    (Array.isArray((data.data as any)?.surveys) ? (data.data as any).surveys?.[0]?.property : undefined) ??
+    {};
+  const mappedProperty =
+    rawProperty && Object.keys(rawProperty).length > 0
+      ? {
+          ...rawProperty,
+          id: rawProperty.id ?? rawProperty.property_id,
+          name: rawProperty.name ?? rawProperty.property_name,
+          city: rawProperty.city,
+          municipality: rawProperty.city ?? rawProperty.municipality,
+          state: rawProperty.state,
+          village: rawProperty.village,
+          primaryLine: rawProperty.linea_productive_primary,
+          secondaryLine: rawProperty.linea_productive_secondary,
+          linea_productive_primary: rawProperty.linea_productive_primary,
+          linea_productive_secondary: rawProperty.linea_productive_secondary,
+          areaInProduction:
+            rawProperty.area_in_production !== undefined && rawProperty.area_in_production !== null
+              ? String(rawProperty.area_in_production)
+              : undefined,
+          area_in_production: rawProperty.area_in_production,
+          latitude:
+            rawProperty.latitude !== undefined && rawProperty.latitude !== null
+              ? String(rawProperty.latitude)
+              : undefined,
+          longitude:
+            rawProperty.longitude !== undefined && rawProperty.longitude !== null
+              ? String(rawProperty.longitude)
+              : undefined,
+          asnm: rawProperty.asnm,
+        }
+      : undefined;
+
+  const rawProducer =
+    (data.data as any)?.producer ??
+    (data.data as any)?.user_producer ??
+    (Array.isArray((data.data as any)?.surveys) ? (data.data as any).surveys?.[0]?.user_producer : undefined);
+  const mappedProducer =
+    rawProducer && Object.keys(rawProducer).length > 0
+      ? {
+          ...rawProducer,
+          name: rawProducer.name,
+          type_id: rawProducer.type_id,
+          identification: rawProducer.identification,
+          number_phone: rawProducer.number_phone ?? rawProducer.phone,
+        }
+      : undefined;
+
+  const surveys =
+    (data.data as any)?.surveys?.map((survey: any) => {
+      const normalizedVisitDate =
+        survey.visit_date ??
+        survey.date_hour_end ??
+        survey.date_acompanamiento ??
+        null;
+      return {
+        ...survey,
+        visit_date: normalizedVisitDate,
+        property: mappedProperty ?? survey.property,
+        user_producer: mappedProducer ?? survey.user_producer,
+      };
+    }) ?? data.data?.surveys ?? [];
+
+  return {
+    ...data,
+    data: {
+      property: mappedProperty,
+      producer: mappedProducer,
+      surveys,
+    },
+  };
 };
 
 export const fetchPropertySurveys = async (
