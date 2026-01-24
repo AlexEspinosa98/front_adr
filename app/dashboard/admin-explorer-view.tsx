@@ -1366,12 +1366,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     const currentTime =
       time ?? getTimePart((editableVisit as any)?.date_hour_end ?? (editableVisit as any)?.visit_date);
     if (!currentDate) return;
-    const localStamp = `${currentDate}T${(currentTime || "00:00").padStart(5, "0")}:00`;
+    const combined = `${currentDate}T${(currentTime || "00:00").padStart(5, "0")}:00Z`;
     setEditableVisit((prev) =>
       prev
         ? {
             ...prev,
-            date_hour_end: localStamp,
+            date_hour_end: combined,
           }
         : prev,
     );
@@ -1519,12 +1519,17 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   const departmentOptions = Array.from(
     new Set([...(DEPARTMENTS as readonly string[]), ...(matchedDepartment ? [matchedDepartment] : [])]),
   );
-  const availableMunicipalities =
+  const baseMunicipalities =
     matchedDepartment && MUNICIPALITIES[matchedDepartment as keyof typeof MUNICIPALITIES]
       ? MUNICIPALITIES[matchedDepartment as keyof typeof MUNICIPALITIES]
-      : editableProperty?.municipality
-        ? [editableProperty.municipality]
-        : [];
+      : [];
+  const availableMunicipalities = Array.from(
+    new Set([
+      ...baseMunicipalities,
+      ...(editableProperty?.city ? [editableProperty.city] : []),
+      ...(editableProperty?.municipality ? [editableProperty.municipality] : []),
+    ].filter(Boolean) as string[]),
+  );
   const { mutateAsync: mutateSurveyState, isPending: decisionLoading } = useMutation({
     mutationFn: updateSurveyState,
   });
@@ -3809,9 +3814,14 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                 <FieldInput
                                   label="Departamento"
                                   type="select"
-                                  options={[...DEPARTMENTS] as string[]}
-                                  value={editableProperty?.state ?? ""}
-                                  onChange={(v) => updatePropertyField("state", v)}
+                                  options={departmentOptions}
+                                  value={matchedDepartment ?? editableProperty?.state ?? ""}
+                                  onChange={(v) => {
+                                    updatePropertyField("state", v);
+                                    // Reset municipio if cambia el depto
+                                    updatePropertyField("city", "");
+                                    updatePropertyField("municipality", "");
+                                  }}
                                 />
                                 <FieldInput
                                   label="Municipio"
