@@ -1471,6 +1471,11 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     if (!editableProperty) return undefined;
     const source = editableProperty as Record<string, unknown>;
     const original = initialProperty;
+    const normalizeValue = (value: unknown) => {
+      if (value === undefined) return undefined;
+      if (typeof value === "string" && value.trim() === "") return null;
+      return value;
+    };
     const mapping: Record<string, string[]> = {
       name: ["name"],
       latitude: ["latitude"],
@@ -1486,16 +1491,13 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     };
     const payload: Record<string, unknown> = {};
     Object.entries(mapping).forEach(([target, candidates]) => {
-      const currentValue = candidates.map((k) => source[k]).find((v) => v !== undefined);
-      const originalValue = candidates
-        .map((k) => (original as any)?.[k])
-        .find((v) => v !== undefined);
-      if (
-        currentValue !== undefined &&
-        currentValue !== null &&
-        !(typeof currentValue === "string" && currentValue.trim() === "") &&
-        currentValue !== originalValue
-      ) {
+      const currentValue = normalizeValue(
+        candidates.map((k) => source[k]).find((v) => v !== undefined),
+      );
+      const originalValue = normalizeValue(
+        candidates.map((k) => (original as any)?.[k]).find((v) => v !== undefined),
+      );
+      if (currentValue !== undefined && currentValue !== originalValue) {
         payload[target] = currentValue;
       }
     });
