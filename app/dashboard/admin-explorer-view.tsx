@@ -12,7 +12,6 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Session } from "next-auth";
 import Link from "next/link";
-import Image from "next/image";
 import { signOut, useSession } from "next-auth/react";
 import {
   FiActivity,
@@ -826,7 +825,8 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     [],
   );
 
-  const DISPLAY_OFFSET_MINUTES = -5 * 60; // UTC-5
+  // Keep visit date/time exactly as entered by the user (no implicit timezone shift)
+  const DISPLAY_OFFSET_MINUTES = 0;
   const shiftToOffset = (value?: string | null) => {
     if (!value) return null;
     if (!value.includes("T")) return null;
@@ -3999,13 +3999,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                           className="cursor-pointer"
                                           onClick={() => setSelectedImageUrl(photo.url)}
                                         >
-                                          <Image
+                                          <img
                                             src={photo.url}
                                             alt={photo.label}
-                                            width={800}
-                                            height={352}
+                                            loading="eager"
                                             className="h-44 w-full object-cover transition hover:opacity-90"
-                                            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                                            style={{ width: "100%", height: "176px" }}
                                           />
                                         </div>
                                         <div className="flex items-center justify-between px-3 py-2">
@@ -4252,13 +4251,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
                                     Firma extensionista
                                   </p>
                                   {visitExtensionist?.signing_image_path ? (
-                                    <Image
+                                    <img
                                       src={visitExtensionist.signing_image_path}
                                       alt="Firma del extensionista"
-                                      width={320}
-                                      height={80}
+                                      loading="eager"
                                       className="mt-2 h-20 w-full max-w-xs rounded-md border border-emerald-100 bg-white object-contain p-2"
-                                      sizes="(max-width: 768px) 100vw, 320px"
+                                      style={{ width: "100%", height: "80px" }}
                                     />
                                   ) : (
                                     <p className="text-sm font-semibold text-emerald-900">
