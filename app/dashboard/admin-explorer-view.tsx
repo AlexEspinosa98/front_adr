@@ -826,28 +826,14 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   );
 
 // Keep visit date/time exactly as entered by the user (store in UTC, show in local)
-const STORAGE_TIME_OFFSET_MINUTES = 5 * 60; // backend keeps UTC; user selects in UTC-5
-const DISPLAY_OFFSET_MINUTES = 0;
-
-const shiftMinutes = (value?: string | null, minutes: number = 0) => {
-  if (!value) return null;
-  if (!value.includes("T")) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return new Date(parsed.getTime() + minutes * 60 * 1000);
-};
-
-const shiftToOffset = (value?: string | null) => shiftMinutes(value, DISPLAY_OFFSET_MINUTES);
-const shiftFromStorage = (value?: string | null) =>
-  shiftMinutes(value, -STORAGE_TIME_OFFSET_MINUTES);
 
 const formatDate = (value?: string | null) => {
   if (!value) return undefined;
-  const shifted = shiftFromStorage(value) ?? shiftToOffset(value);
-  if (shifted) {
-    const yyyy = shifted.getFullYear();
-    const mm = String(shifted.getMonth() + 1).padStart(2, "0");
-    const dd = String(shifted.getDate()).padStart(2, "0");
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   }
   const dateMatch = value.match(/(\d{4}-\d{2}-\d{2})/);
@@ -862,7 +848,7 @@ const formatDate = (value?: string | null) => {
 
 const getDatePart = (value?: string | null) => {
   if (!value) return "";
-  const parsed = shiftFromStorage(value) ?? new Date(value);
+  const parsed = new Date(value);
   if (!Number.isNaN(parsed.getTime())) {
     const yyyy = parsed.getFullYear();
     const mm = String(parsed.getMonth() + 1).padStart(2, "0");
@@ -875,7 +861,7 @@ const getDatePart = (value?: string | null) => {
 
 const getTimePart = (value?: string | null) => {
   if (!value) return "";
-  const parsed = shiftFromStorage(value) ?? new Date(value);
+  const parsed = new Date(value);
   if (!Number.isNaN(parsed.getTime())) {
     const hh = String(parsed.getHours()).padStart(2, "0");
     const mm = String(parsed.getMinutes()).padStart(2, "0");
@@ -1372,10 +1358,10 @@ const getTimePart = (value?: string | null) => {
     const currentTime =
       time ?? getTimePart((editableVisit as any)?.date_hour_end ?? (editableVisit as any)?.visit_date);
     if (!currentDate) return;
-    const baseUtc = new Date(`${currentDate}T${(currentTime || "00:00").padStart(5, "0")}:00Z`);
-    if (Number.isNaN(baseUtc.getTime())) return;
-    const shifted = new Date(baseUtc.getTime() + STORAGE_TIME_OFFSET_MINUTES * 60 * 1000);
-    const combined = shifted.toISOString().replace(/\.\d{3}Z$/, "Z");
+    // Interpret picker values in local time and send them to the backend in UTC (Z)
+    const localStamp = new Date(`${currentDate}T${(currentTime || "00:00").padStart(5, "0")}:00`);
+    if (Number.isNaN(localStamp.getTime())) return;
+    const combined = localStamp.toISOString().replace(/\.\d{3}Z$/, "Z");
     setEditableVisit((prev) =>
       prev
         ? {
