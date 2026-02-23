@@ -1300,14 +1300,29 @@ const getTimePart = (value?: string | null) => {
 
   useEffect(() => {
     if (visitDetail) {
-      setEditableVisit({
+      const normalizedVisit = {
         ...visitDetail,
+        objective_accompaniment:
+          visitDetail.objective_accompaniment ??
+          (visitDetail as any)?.objetive_accompaniment ??
+          "",
+        objetive_accompaniment:
+          visitDetail.objective_accompaniment ??
+          (visitDetail as any)?.objetive_accompaniment ??
+          "",
+        previous_visit_recommendations_fulfilled:
+          visitDetail.previous_visit_recommendations_fulfilled ??
+          (visitDetail as any)?.fulfilled_previous_recommendations,
+        fulfilled_previous_recommendations:
+          visitDetail.previous_visit_recommendations_fulfilled ??
+          (visitDetail as any)?.fulfilled_previous_recommendations,
         origen_register: visitDetail.origen_register ?? "app_movil",
         attended_by: visitDetail.attended_by ?? "Usuario Productor",
         approval_profile: visitDetail.approval_profile ?? "",
-      });
+      };
+      setEditableVisit(normalizedVisit);
       setApprovalProfile(visitDetail.approval_profile ?? "");
-      setInitialVisit(visitDetail as Record<string, unknown>);
+      setInitialVisit(normalizedVisit as Record<string, unknown>);
     } else {
       setEditableVisit(null);
       setApprovalProfile("");
@@ -1346,9 +1361,34 @@ const getTimePart = (value?: string | null) => {
     setUpdateError(null);
   };
 
-  const updateVisitField = (key: string, value: string) => {
+  const updateVisitField = (key: string, value: string | boolean) => {
     clearUpdateFeedback();
     setEditableVisit((prev) => (prev ? { ...prev, [key]: value } : prev));
+    if (key === "objective_accompaniment" || key === "objetive_accompaniment") {
+      setEditableVisit((prev) =>
+        prev
+          ? {
+              ...prev,
+              objective_accompaniment: value,
+              objetive_accompaniment: value,
+            }
+          : prev,
+      );
+    }
+    if (
+      key === "previous_visit_recommendations_fulfilled" ||
+      key === "fulfilled_previous_recommendations"
+    ) {
+      setEditableVisit((prev) =>
+        prev
+          ? {
+              ...prev,
+              previous_visit_recommendations_fulfilled: value,
+              fulfilled_previous_recommendations: value,
+            }
+          : prev,
+      );
+    }
   };
 
   const updateVisitDateTime = (date?: string, time?: string) => {
@@ -1431,7 +1471,8 @@ const getTimePart = (value?: string | null) => {
 
   const buildSurveyPayload = () => {
     if (!editableVisit) return undefined;
-    const allowedKeys = [
+    const baseAllowedKeys = [
+      "objective_accompaniment",
       "objetive_accompaniment",
       "initial_diagnosis",
       "recommendations_commitments",
@@ -1446,6 +1487,30 @@ const getTimePart = (value?: string | null) => {
       "state",
       "medition_focalization",
     ];
+
+    const visit2ExtraKeys = [
+      "objective",
+      "visit_development_follow_up_activities",
+      "previous_visit_recommendations_fulfilled",
+      "fulfilled_previous_recommendations",
+      "visit_followup",
+      "new_recommendations",
+      "observations_seg",
+      "register_coinnovation",
+      "local_practice_tool_technology_coinnovation_identified",
+      "local_coinovation_or_technology_record",
+      "name_innovation",
+      "description_innovation",
+      "problem_solution_innovation",
+      "origin_and_developers",
+      "materials_and_resources",
+      "process_functioning",
+      "potential_replication",
+      "observations_extensionist",
+    ];
+
+    const allowedKeys =
+      selectedVisit === 2 ? [...baseAllowedKeys, ...visit2ExtraKeys] : baseAllowedKeys;
     return diffPayload(
       editableVisit as Record<string, unknown>,
       initialVisit,
@@ -3732,8 +3797,12 @@ const getTimePart = (value?: string | null) => {
                               <div className="grid gap-3 lg:grid-cols-2">
                                 <FieldInput
                                   label="Objetivo del Acompañamiento"
-                                  value={editableVisit?.objetive_accompaniment as string}
-                                  onChange={(v) => updateVisitField("objetive_accompaniment", v)}
+                                  value={
+                                    (editableVisit?.objective_accompaniment ??
+                                      (editableVisit as any)?.objetive_accompaniment ??
+                                      "") as string
+                                  }
+                                  onChange={(v) => updateVisitField("objective_accompaniment", v)}
                                   placeholder="Redacte y escriba el objetivo acorde a lo definido por la EPSEA"
                                   highlight
                                 />
@@ -3925,8 +3994,12 @@ const getTimePart = (value?: string | null) => {
                             <SectionCard number="5." title="Enfoque Técnico Productivo">
                               <FieldInput
                                 label="Objetivo del Acompañamiento"
-                                value={editableVisit?.objetive_accompaniment as string}
-                                onChange={(v) => updateVisitField("objetive_accompaniment", v)}
+                                value={
+                                  (editableVisit?.objective_accompaniment ??
+                                    (editableVisit as any)?.objetive_accompaniment ??
+                                    "") as string
+                                }
+                                onChange={(v) => updateVisitField("objective_accompaniment", v)}
                                 type="textarea"
                                 placeholder="Redacte y escriba el objetivo acorde a lo definido por la EPSEA"
                                 highlight
@@ -3979,9 +4052,224 @@ const getTimePart = (value?: string | null) => {
                                 onChange={(v) => updateVisitField("observations_visited", v)}
                                 type="textarea"
                               />
+                              {selectedVisit === 2 ? (
+                                <>
+                                  <FieldInput
+                                    label="5.5 Desarrollo / seguimiento de actividades"
+                                    value={
+                                      editableVisit?.visit_development_follow_up_activities as string
+                                    }
+                                    onChange={(v) =>
+                                      updateVisitField("visit_development_follow_up_activities", v)
+                                    }
+                                    type="textarea"
+                                    placeholder="Describe actividades realizadas desde la visita anterior"
+                                  />
+                                  <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
+                                    <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                      5.6 ¿Cumplió recomendaciones visita anterior?
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {[
+                                        { label: "Sí", value: true },
+                                        { label: "No", value: false },
+                                      ].map((option) => {
+                                        const isActive =
+                                          (editableVisit?.previous_visit_recommendations_fulfilled ??
+                                            (editableVisit as any)?.fulfilled_previous_recommendations) ===
+                                          option.value;
+                                        return (
+                                          <button
+                                            key={option.label}
+                                            type="button"
+                                            className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
+                                              ? "bg-emerald-900 text-white"
+                                              : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                              }`}
+                                            onClick={() => {
+                                              updateVisitField(
+                                                "previous_visit_recommendations_fulfilled",
+                                                option.value,
+                                              );
+                                              updateVisitField("fulfilled_previous_recommendations", option.value);
+                                            }}
+                                          >
+                                            {option.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                  <FieldInput
+                                    label="5.7 Objetivo específico"
+                                    value={editableVisit?.objective as string}
+                                    onChange={(v) => updateVisitField("objective", v)}
+                                    type="textarea"
+                                    placeholder="Objetivo concreto de esta visita"
+                                  />
+                                  <FieldInput
+                                    label="5.8 Seguimiento de la visita"
+                                    value={editableVisit?.visit_followup as string}
+                                    onChange={(v) => updateVisitField("visit_followup", v)}
+                                    type="textarea"
+                                    placeholder="Hallazgos y seguimiento realizado en campo"
+                                  />
+                                  <FieldInput
+                                    label="5.9 Nuevas recomendaciones"
+                                    value={editableVisit?.new_recommendations as string}
+                                    onChange={(v) => updateVisitField("new_recommendations", v)}
+                                    type="textarea"
+                                    placeholder="Recomendaciones adicionales surgidas en esta visita"
+                                  />
+                                  <FieldInput
+                                    label="5.10 Observaciones seguimiento (SEG)"
+                                    value={editableVisit?.observations_seg as string}
+                                    onChange={(v) => updateVisitField("observations_seg", v)}
+                                    type="textarea"
+                                    placeholder="Observaciones generales de seguimiento"
+                                  />
+                                  <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
+                                    <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                      5.11 Co-innovación y registros
+                                    </p>
+                                    <div className="mt-2 grid gap-3 md:grid-cols-2">
+                                      <div className="flex flex-col gap-2">
+                                        <p className="text-sm font-semibold text-emerald-900">
+                                          ¿Se registró coinnovación?
+                                        </p>
+                                        <div className="flex gap-2">
+                                          {["Sí", "No"].map((option) => {
+                                            const isActive =
+                                              (editableVisit?.register_coinnovation as string) === option;
+                                            return (
+                                              <button
+                                                key={option}
+                                                type="button"
+                                                className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
+                                                  ? "bg-emerald-900 text-white"
+                                                  : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                                  }`}
+                                                onClick={() => updateVisitField("register_coinnovation", option)}
+                                              >
+                                                {option}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col gap-2">
+                                        <label className="text-sm font-semibold text-emerald-900">
+                                          ¿Práctica/tecnología identificada?
+                                        </label>
+                                        <div className="flex gap-2">
+                                          {[true, false].map((option) => {
+                                            const isActive =
+                                              editableVisit?.local_practice_tool_technology_coinnovation_identified ===
+                                              option;
+                                            return (
+                                              <button
+                                                key={String(option)}
+                                                type="button"
+                                                className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
+                                                  ? "bg-emerald-900 text-white"
+                                                  : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                                  }`}
+                                                onClick={() =>
+                                                  updateVisitField(
+                                                    "local_practice_tool_technology_coinnovation_identified",
+                                                    option,
+                                                  )
+                                                }
+                                              >
+                                                {option ? "Sí" : "No"}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col gap-2">
+                                        <label className="text-sm font-semibold text-emerald-900">
+                                          ¿Se registró la coinnovación/tecnología?
+                                        </label>
+                                        <div className="flex gap-2">
+                                          {[true, false].map((option) => {
+                                            const isActive =
+                                              editableVisit?.local_coinovation_or_technology_record === option;
+                                            return (
+                                              <button
+                                                key={String(option)}
+                                                type="button"
+                                                className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
+                                                  ? "bg-emerald-900 text-white"
+                                                  : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                                  }`}
+                                                onClick={() =>
+                                                  updateVisitField("local_coinovation_or_technology_record", option)
+                                                }
+                                              >
+                                                {option ? "Sí" : "No"}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <FieldInput
+                                    label="5.12 Práctica / innovación identificada"
+                                    value={editableVisit?.name_innovation as string}
+                                    onChange={(v) => updateVisitField("name_innovation", v)}
+                                    placeholder="Ej: Repelente de moscas"
+                                  />
+                                  <FieldInput
+                                    label="5.13 Descripción de la innovación"
+                                    value={editableVisit?.description_innovation as string}
+                                    onChange={(v) => updateVisitField("description_innovation", v)}
+                                    type="textarea"
+                                  />
+                                  <FieldInput
+                                    label="5.14 Problema que resuelve"
+                                    value={editableVisit?.problem_solution_innovation as string}
+                                    onChange={(v) => updateVisitField("problem_solution_innovation", v)}
+                                    type="textarea"
+                                  />
+                                  <FieldInput
+                                    label="5.15 Origen y desarrolladores"
+                                    value={editableVisit?.origin_and_developers as string}
+                                    onChange={(v) => updateVisitField("origin_and_developers", v)}
+                                    type="textarea"
+                                  />
+                                  <FieldInput
+                                    label="5.16 Materiales y recursos"
+                                    value={editableVisit?.materials_and_resources as string}
+                                    onChange={(v) => updateVisitField("materials_and_resources", v)}
+                                    type="textarea"
+                                  />
+                                  <FieldInput
+                                    label="5.17 Proceso / funcionamiento"
+                                    value={editableVisit?.process_functioning as string}
+                                    onChange={(v) => updateVisitField("process_functioning", v)}
+                                    type="textarea"
+                                  />
+                                  <FieldInput
+                                    label="5.18 Potencial de réplica"
+                                    value={editableVisit?.potential_replication as string}
+                                    onChange={(v) => updateVisitField("potential_replication", v)}
+                                    type="textarea"
+                                  />
+                                  <FieldInput
+                                    label="5.19 Observaciones del extensionista"
+                                    value={editableVisit?.observations_extensionist as string}
+                                    onChange={(v) => updateVisitField("observations_extensionist", v)}
+                                    type="textarea"
+                                  />
+                                </>
+                              ) : null}
                               <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
                                 <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-                                  5.5 Registro Fotográfico visita
+                                  {selectedVisit === 2
+                                    ? "5.20 Registro Fotográfico visita"
+                                    : "5.5 Registro Fotográfico visita"}
                                 </p>
                                 {photoGallery.length > 0 ? (
                                   <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

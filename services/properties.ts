@@ -290,9 +290,28 @@ export interface PropertySurveyVisit {
     string,
     { score?: number; obervation?: string | null }
   >;
-  objetive_accompaniment?: string;
+  objective_accompaniment?: string;
+  objetive_accompaniment?: string; // legacy key from mobile
+  visit_development_follow_up_activities?: string;
+  previous_visit_recommendations_fulfilled?: string | boolean;
   initial_diagnosis?: string;
+  objective?: string;
+  visit_followup?: string;
+  fulfilled_previous_recommendations?: string | boolean;
   recommendations_commitments?: string;
+  new_recommendations?: string;
+  observations_seg?: string;
+  register_coinnovation?: string;
+  local_practice_tool_technology_coinnovation_identified?: boolean;
+  local_coinovation_or_technology_record?: boolean;
+  name_innovation?: string;
+  description_innovation?: string;
+  problem_solution_innovation?: string;
+  origin_and_developers?: string;
+  materials_and_resources?: string;
+  process_functioning?: string;
+  potential_replication?: string;
+  observations_extensionist?: string;
   observations_visited?: string;
   photo_user?: string;
   photo_interaction?: string;
@@ -496,6 +515,18 @@ export const fetchProducerSurveyVisit = async (
   token?: string,
   tokenType: string = "Token",
 ): Promise<PropertySurveyVisitResponse> => {
+  const normalizeBoolean = (value: unknown): boolean | undefined => {
+    if (value === undefined || value === null || value === "") return undefined;
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "si", "sí", "1", "yes"].includes(normalized)) return true;
+      if (["false", "no", "0"].includes(normalized)) return false;
+    }
+    return undefined;
+  };
+
   const { data } = await httpClient.get<PropertySurveyVisitResponse>(
     `/admin/producers/${producerId}/surveys/${surveyTypeId}`,
     {
@@ -559,8 +590,27 @@ export const fetchProducerSurveyVisit = async (
         survey.date_hour_end ??
         survey.date_acompanamiento ??
         null;
+      const objectiveAccompaniment =
+        survey.objective_accompaniment ?? survey.objetive_accompaniment;
+      const prevFulfilled = normalizeBoolean(
+        survey.previous_visit_recommendations_fulfilled ??
+          survey.fulfilled_previous_recommendations,
+      );
+      const fulfilledPrev = prevFulfilled ?? survey.fulfilled_previous_recommendations;
+      const localPracticeIdentified = normalizeBoolean(
+        survey.local_practice_tool_technology_coinnovation_identified,
+      );
+      const localCoinnovationRecord = normalizeBoolean(
+        survey.local_coinovation_or_technology_record,
+      );
       return {
         ...survey,
+        objective_accompaniment: objectiveAccompaniment,
+        objetive_accompaniment: objectiveAccompaniment,
+        previous_visit_recommendations_fulfilled: prevFulfilled,
+        fulfilled_previous_recommendations: fulfilledPrev,
+        local_practice_tool_technology_coinnovation_identified: localPracticeIdentified,
+        local_coinovation_or_technology_record: localCoinnovationRecord,
         visit_date: normalizedVisitDate,
         property: mappedProperty ?? survey.property,
         user_producer: mappedProducer ?? survey.user_producer,
