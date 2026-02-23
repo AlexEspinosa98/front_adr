@@ -290,8 +290,8 @@ export interface PropertySurveyVisit {
     string,
     { score?: number; obervation?: string | null }
   >;
-  objective_accompaniment?: string;
-  objetive_accompaniment?: string; // legacy key from mobile
+  objective_accompaniment?: string | boolean;
+  objetive_accompaniment?: string | boolean; // legacy key from mobile
   visit_development_follow_up_activities?: string;
   previous_visit_recommendations_fulfilled?: string | boolean;
   initial_diagnosis?: string;

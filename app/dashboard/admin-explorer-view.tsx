@@ -1365,12 +1365,14 @@ const getTimePart = (value?: string | null) => {
     clearUpdateFeedback();
     setEditableVisit((prev) => (prev ? { ...prev, [key]: value } : prev));
     if (key === "objective_accompaniment" || key === "objetive_accompaniment") {
+      const stringValue =
+        typeof value === "string" ? value : value ? "true" : "false";
       setEditableVisit((prev) =>
         prev
           ? {
               ...prev,
-              objective_accompaniment: value,
-              objetive_accompaniment: value,
+              objective_accompaniment: stringValue as string,
+              objetive_accompaniment: stringValue as string,
             }
           : prev,
       );
