@@ -1077,6 +1077,24 @@ const getTimePart = (value?: string | null) => {
     { name: "Enrique Barrios", profile: "Técnico Agropecuario" },
     { name: "Alberto Oliveros", profile: "Técnico Agropecuario" },
     { name: "Yohan Lechuga", profile: "Médico Veterinario" },
+    { name: "NATHALY MORENO CORTES", profile: "Ingeniera Agrónoma" },
+    { name: "JESUS DAVID RIOS GARCIA", profile: "Tecnólogo en Producción Ganadera" },
+    { name: "MARIO ALBERTO SOLIS VILORIA", profile: "Técnico Agropecuario" },
+    { name: "KAROL ANDREA MEJIA MADARIAGA", profile: "Médico Veterinario Zootecnista" },
+    { name: "ANDIS MANUEL MARRIAGA OROZCO", profile: "Zootecnista" },
+    { name: "MIGUEL ALCIBAR OLIVERO VASQUEZ", profile: "Ingeniero Agrónomo" },
+    { name: "YOVANIS ALFREDO PEÑARANDA QUINTANA", profile: "Zootecnista" },
+    { name: "MANUEL HUMBERTO MENESES HERNANDEZ", profile: "Ingeniero Agrónomo" },
+    { name: "JULIAN ALBERTO SOSA GONZALEZ", profile: "Trabajador calificado en Agricola de siembra de palma de aceite" },
+    { name: "JUAN CARLOS AGUILAR CERVANTES", profile: "Tecnólogo en Administración de empresas agropecuarias" },
+    { name: "ADMAIER ANTONIO BASTIDAS CASTRILLO", profile: "Tecnólogo en Sistemas de gestión Ambiental" },
+    { name: "MIGUEL ENRIQUE GAMEZ PIÑEREZ", profile: "Técnico profesional en ciencias Agropecuarias" },
+    { name: "LORAINE CACERES VILLA", profile: "Técnico profesional en Producción Agricola" },
+    { name: "LUIS ANTONIO MEDINA PADILLA", profile: "Ingeniero Agrónomo" },
+    { name: "LILIANA DE LOS MILAGROS PIMIENTA", profile: "Ingeniera Agroindustrial" },
+    { name: "CHRISTIAN JOSE IGLESIAS BELTRAN", profile: "Tecnico en explotaciones agropecuarias ecológicas" },
+    { name: "NANCY DOMINGUEZ MENDOZA", profile: "Ingeniera Agrónoma" },
+    { name: "KAITY JULIET PERTUZ ARNACHE", profile: "Médica Veterinaria Zootecnista" },
   ];
   const NAME_TO_PROFILE = PROFESSIONAL_PROFILES.reduce<Record<string, string>>(
     (acc, item) => {
@@ -4013,6 +4031,15 @@ const getTimePart = (value?: string | null) => {
                                 type="textarea"
                                 placeholder="Describa hallazgos y situación encontrada en la finca"
                               />
+                              {selectedVisit !== 2 && editableVisit?.visit_followup ? (
+                                <FieldInput
+                                  label="Seguimiento de la visita"
+                                  value={editableVisit?.visit_followup as string}
+                                  readOnly
+                                  type="textarea"
+                                  placeholder="Seguimiento registrado en la visita"
+                                />
+                              ) : null}
                               <FieldInput
                                 label="5.2 Recomendaciones  y Compromisos"
                                 value={editableVisit?.recommendations_commitments as string}
