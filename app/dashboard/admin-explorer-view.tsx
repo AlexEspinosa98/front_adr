@@ -12,6 +12,7 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Session } from "next-auth";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { signOut, useSession } from "next-auth/react";
 import {
   FiActivity,
@@ -109,6 +110,40 @@ const SectionCard = ({
     <div className="space-y-3">{children}</div>
   </div>
 );
+
+const SmallLeafletMap = dynamic(
+  () => import("@/components/ui/SmallLeafletMap").then((mod) => mod.SmallLeafletMap),
+  { ssr: false },
+);
+
+const parseCoordinate = (value: string | number | null | undefined) => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number.parseFloat(trimmed.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const getValidCoordinates = (
+  latitude: string | number | null | undefined,
+  longitude: string | number | null | undefined,
+) => {
+  const lat = parseCoordinate(latitude);
+  const lng = parseCoordinate(longitude);
+
+  if (lat === null || lng === null) return null;
+  if (lat < -90 || lat > 90) return null;
+  if (lng < -180 || lng > 180) return null;
+
+  return { lat, lng };
+};
 
 const FieldInput = ({
   label,
@@ -508,6 +543,10 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     "";
   const exportCityOptions = SUMMARY_CITIES[exportDepartment] ?? [];
   const selectedExportCity = exportCity ?? "";
+  const propertyCoordinates = useMemo(
+    () => getValidCoordinates(editableProperty?.latitude, editableProperty?.longitude),
+    [editableProperty?.latitude, editableProperty?.longitude],
+  );
   const filteredExtensionists = extensionists.filter((ext) => {
     const matchesCity = cityFilter ? ext.city === cityFilter : true;
     const matchesZone = zoneFilter ? ext.zone === zoneFilter : true;
@@ -3925,6 +3964,23 @@ const getTimePart = (value?: string | null) => {
                                   onChange={(v) => updatePropertyField("village", v)}
                                   placeholder="Ej: Vereda Mock"
                                 />
+                              </div>
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
+                                  Ubicación GPS
+                                </p>
+                                {propertyCoordinates ? (
+                                  <div className="h-44 overflow-hidden rounded-lg border border-emerald-100 shadow-sm">
+                                    <SmallLeafletMap
+                                      latitude={propertyCoordinates.lat}
+                                      longitude={propertyCoordinates.lng}
+                                    />
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-emerald-500">
+                                    Sin coordenadas GPS válidas para mostrar el mapa.
+                                  </p>
+                                )}
                               </div>
                             </SectionCard>
 
