@@ -262,6 +262,9 @@ export interface BasicUpdateSurveyInput {
     photo_interaction?: File;
     photo_panorama?: File;
     phono_extra_1?: File;
+    photo_georeferenced?: File;
+    photo_without_labels?: File;
+    photo_marked_overlay?: File;
     file_pdf?: File;
   };
   token?: string;

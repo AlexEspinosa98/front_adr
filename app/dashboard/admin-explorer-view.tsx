@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  ChangeEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -31,6 +32,7 @@ import {
   FiExternalLink,
   FiMenu,
   FiRefreshCcw,
+  FiUpload,
 } from "react-icons/fi";
 
 import {
@@ -53,8 +55,6 @@ import {
 } from "@/services/properties";
 import {
   fetchSurveyStatistics,
-  fetchSurveySummaryByCity,
-  type CitySurveySummary,
   exportSurveyExcel,
 } from "@/services/statistics";
 import {
@@ -317,7 +317,6 @@ type EditableProducer =
   ({ name?: string; type_id?: string; identification?: string; number_phone?: string } &
     Record<string, unknown>);
 type EditablePropertyState = (ExtensionistPropertyApi & Record<string, unknown>) | null;
-type StateCountEntry = { value?: string; count?: number };
 type SurveySummaryEntry = {
   count?: number;
   latest_visit?: string | null;
@@ -329,6 +328,16 @@ type VisitExtensionist = {
   identification?: string;
   signing_image_path?: string;
 } & Record<string, unknown>;
+
+type UploadFileKey =
+  | "photo_user"
+  | "photo_interaction"
+  | "photo_panorama"
+  | "phono_extra_1"
+  | "file_pdf";
+
+type UpdateFilesState = Partial<Record<UploadFileKey, File>>;
+type UploadPreviewState = Partial<Record<UploadFileKey, string>>;
 
 type ApiErrorPayload = { message?: string };
 type ApiErrorShape = { response?: { data?: ApiErrorPayload }; message?: string };
@@ -388,19 +397,12 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
-  const [updateFiles, setUpdateFiles] = useState<{
-    photo_user?: File;
-    photo_interaction?: File;
-    photo_panorama?: File;
-    phono_extra_1?: File;
-    file_pdf?: File;
-  }>({});
+  const [updateFiles, setUpdateFiles] = useState<UpdateFilesState>({});
+  const [photoPreviewUrls, setPhotoPreviewUrls] = useState<UploadPreviewState>({});
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
-  const [summaryDepartment, setSummaryDepartment] =
-    useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
-  const [summaryCity, setSummaryCity] = useState<string | undefined>(
-    SUMMARY_CITIES["Magdalena"][0],
-  );
+  const [uploadOptionsOpen, setUploadOptionsOpen] = useState(false);
+  const [uploadTarget, setUploadTarget] = useState<{ key: UploadFileKey; label: string } | null>(null);
+  const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportDepartment, setExportDepartment] =
     useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
@@ -412,6 +414,13 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   const [reportExpandedProducerId, setReportExpandedProducerId] = useState<number | null>(null);
   const [reportExporting, setReportExporting] = useState(false);
   const [reportExportError, setReportExportError] = useState<string | null>(null);
+  useEffect(() => {
+    return () => {
+      Object.values(photoPreviewUrls).forEach((url) => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    };
+  }, [photoPreviewUrls]);
   const [activeView, setActiveView] = useState<"stats" | "visits" | "reports">(
     initialView,
   );
@@ -461,6 +470,7 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     setUpdateMessage(null);
     setUpdateError(null);
     setUpdateFiles({});
+    setPhotoPreviewUrls({});
     setSelectedProducer(null);
     setExpandedProducerId(null);
     setReportExpandedProducerId(null);
@@ -536,11 +546,6 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       }
     });
   });
-  const summaryCityOptions = SUMMARY_CITIES[summaryDepartment] ?? [];
-  const selectedSummaryCity =
-    summaryCityOptions.find((city) => city === summaryCity) ??
-    summaryCityOptions[0] ??
-    "";
   const exportCityOptions = SUMMARY_CITIES[exportDepartment] ?? [];
   const selectedExportCity = exportCity ?? "";
   const propertyCoordinates = useMemo(
@@ -608,18 +613,6 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
     enabled: Boolean(selectedProducer && selectedVisit && accessToken),
   });
 
-  const {
-    data: citySummaryResponse,
-    isLoading: citySummaryLoading,
-    isError: citySummaryError,
-    error: citySummaryFetchError,
-  } = useQuery({
-    queryKey: ["survey-summary-city", summaryCity, accessToken, tokenType],
-    queryFn: () =>
-      fetchSurveySummaryByCity(summaryCity ?? "", accessToken, tokenType),
-    enabled: Boolean(summaryCity && accessToken),
-  });
-  const citySummary: CitySurveySummary | undefined = citySummaryResponse?.data;
   const { mutateAsync: mutateExport, isPending: exportLoading } = useMutation({
     mutationFn: exportSurveyExcel,
   });
@@ -733,8 +726,105 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
 
   const surveyStats = statsResponse?.data;
   const totals = surveyStats?.total_visits;
-  const propertiesTotals = surveyStats?.properties;
-  const extensionistsUnique = surveyStats?.extensionists?.unique_total ?? 0;
+  const workflowTotals = surveyStats?.workflow_states ?? {
+    pending: 0,
+    accepted: 0,
+    rejected: 0,
+  };
+  const workflowByDepartment = surveyStats?.workflow_states_by_department ?? {};
+  const departmentRowsRaw = surveyStats?.by_department ?? [];
+  const departmentTotalRow = departmentRowsRaw.find((row) => /total/i.test(row.state));
+  const departmentRows = departmentRowsRaw.filter((row) => !/total/i.test(row.state));
+  const departmentTableRows = [...departmentRows, ...(departmentTotalRow ? [departmentTotalRow] : [])];
+  const pieByDepartment = surveyStats?.pie_by_department ?? [];
+  const subregionRows = surveyStats?.subregions ?? [];
+  const workflowStateMeta = [
+    {
+      key: "pending" as const,
+      label: "Pendientes",
+      color: "#f59e0b",
+      chipBg: "#fffbeb",
+      chipColor: "#b45309",
+    },
+    {
+      key: "accepted" as const,
+      label: "Aceptados",
+      color: "#10b981",
+      chipBg: "#ecfdf5",
+      chipColor: "#047857",
+    },
+    {
+      key: "rejected" as const,
+      label: "Rechazados",
+      color: "#ef4444",
+      chipBg: "#fef2f2",
+      chipColor: "#b91c1c",
+    },
+  ];
+  const workflowTotalCount =
+    workflowTotals.pending + workflowTotals.accepted + workflowTotals.rejected;
+  const workflowDepartmentEntries = Object.entries(workflowByDepartment).sort(
+    ([a], [b]) => {
+      const order: Record<string, number> = { Magdalena: 1, "Atlántico": 2 };
+      return (order[a] ?? 99) - (order[b] ?? 99) || a.localeCompare(b);
+    },
+  );
+  const departmentStatsRows = Array.from(
+    new Set([
+      ...departmentRows.map((row) => row.state),
+      ...workflowDepartmentEntries.map(([department]) => department),
+    ]),
+  )
+    .filter((department) => department && !/total/i.test(department))
+    .sort((a, b) => {
+      const order: Record<string, number> = { Magdalena: 1, "Atlántico": 2 };
+      return (order[a] ?? 99) - (order[b] ?? 99) || a.localeCompare(b);
+    })
+    .map((department) => {
+      const visit = departmentRows.find((row) => row.state === department);
+      const workflow = workflowByDepartment[department] ?? {
+        pending: 0,
+        accepted: 0,
+        rejected: 0,
+      };
+      const workflowTotal =
+        (workflow.pending ?? 0) +
+        (workflow.accepted ?? 0) +
+        (workflow.rejected ?? 0);
+      return {
+        department,
+        visit_1: visit?.survey_1 ?? 0,
+        visit_2: visit?.survey_2 ?? 0,
+        visit_3: visit?.survey_3 ?? 0,
+        visit_total: visit?.total ?? 0,
+        pending: workflow.pending ?? 0,
+        accepted: workflow.accepted ?? 0,
+        rejected: workflow.rejected ?? 0,
+        workflow_total: workflowTotal,
+      };
+    });
+  const departmentStatsTotals = departmentStatsRows.reduce(
+    (acc, row) => ({
+      visit_1: acc.visit_1 + row.visit_1,
+      visit_2: acc.visit_2 + row.visit_2,
+      visit_3: acc.visit_3 + row.visit_3,
+      visit_total: acc.visit_total + row.visit_total,
+      pending: acc.pending + row.pending,
+      accepted: acc.accepted + row.accepted,
+      rejected: acc.rejected + row.rejected,
+      workflow_total: acc.workflow_total + row.workflow_total,
+    }),
+    {
+      visit_1: 0,
+      visit_2: 0,
+      visit_3: 0,
+      visit_total: 0,
+      pending: 0,
+      accepted: 0,
+      rejected: 0,
+      workflow_total: 0,
+    },
+  );
   const statCards = [
     {
       label: "Visita 1 (inicial)",
@@ -760,27 +850,58 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
       hint: "",
       icon: <FiHome aria-hidden />,
     },
-    {
-      label: "Extensionistas únicos",
-      value: extensionistsUnique,
-      hint: "",
-      icon: <FiUsers aria-hidden />,
-    },
-    {
-      label: "Propiedades Mag/Atl",
-      value:
-        (propertiesTotals?.total_magdalena_atlantico ??
-          ((propertiesTotals?.magdalena ?? 0) + (propertiesTotals?.atlantico ?? 0))) ?? 0,
-      hint: "",
-      icon: <FiMapPin aria-hidden />,
-    },
   ];
-  const departmentRows = surveyStats?.by_department ?? [];
-  const topCities =
-    surveyStats?.by_city
-      ?.sort((a, b) => (b.total ?? 0) - (a.total ?? 0))
-      ?.slice(0, 8)
-      ?.map((item) => ({ value: item.city, count: item.total })) ?? [];
+  const buildTopSubregions = (dept: "Magdalena" | "Atlántico", limit = 8) =>
+    (subregionRows ?? [])
+      .filter((item) => item.department === dept)
+      .sort((a, b) => (b.total ?? 0) - (a.total ?? 0))
+      .slice(0, limit)
+      .map((item) => ({ value: item.subregion, count: item.total }));
+  const topSubregionsMagdalena = buildTopSubregions("Magdalena");
+  const topSubregionsAtlantico = buildTopSubregions("Atlántico");
+  const visitTypeOrder = ["visita_1", "visita_2", "visita_3"] as const;
+  const pieVisitLabel: Record<"visita_1" | "visita_2" | "visita_3", string> = {
+    visita_1: "Visita 1",
+    visita_2: "Visita 2",
+    visita_3: "Visita 3",
+  };
+  const pieVisitColor: Record<"visita_1" | "visita_2" | "visita_3", string> = {
+    visita_1: "#34d399",
+    visita_2: "#10b981",
+    visita_3: "#047857",
+  };
+  const populationByDepartment: Record<"Magdalena" | "Atlántico", number> = {
+    Magdalena: 2360,
+    "Atlántico": 1100,
+  };
+  const pieChartsByDepartment = (["Magdalena", "Atlántico"] as const).map((department) => {
+    const basePopulation = populationByDepartment[department];
+    const itemsByVisit = new Map(
+      pieByDepartment
+        .filter((item) => item.state === department)
+        .map((item) => [item.visit_type, item] as const),
+    );
+
+    return {
+      department,
+      basePopulation,
+      data: visitTypeOrder.map((visitType) => {
+          const item = itemsByVisit.get(visitType);
+          const count = item?.count ?? 0;
+          const populationBase = item?.population_base ?? basePopulation;
+          const percentRaw =
+            item?.percent ?? (populationBase ? (count / populationBase) * 100 : 0);
+          return {
+            visitType,
+            name: pieVisitLabel[visitType],
+            percent: Number(percentRaw.toFixed(2)),
+            count,
+            populationBase,
+            color: pieVisitColor[visitType],
+          };
+        }),
+    };
+  });
 
   const handleLogout = () => {
     window.localStorage.removeItem("access_token");
@@ -1344,16 +1465,90 @@ const getTimePart = (value?: string | null) => {
       visitDetail?.medition_focalization ??
       {},
   );
-  const photoGallery = (
-    [
-      { label: "Foto del productor", url: normalizeMediaUrl(visitDetail?.photo_user) },
-      { label: "Foto de interacción", url: normalizeMediaUrl(visitDetail?.photo_interaction) },
-      { label: "Panorama", url: normalizeMediaUrl(visitDetail?.photo_panorama) },
-      { label: "Foto adicional", url: normalizeMediaUrl(visitDetail?.phono_extra_1) },
-    ] as const
-  )
-    .filter((photo) => Boolean(photo.url))
-    .map((photo) => ({ label: photo.label as string, url: photo.url as string }));
+  const watermarkText = useMemo(() => {
+    const lat =
+      (editableProperty?.latitude as string | number | undefined) ??
+      (visitPropertyData?.latitude as string | number | undefined);
+    const lng =
+      (editableProperty?.longitude as string | number | undefined) ??
+      (visitPropertyData?.longitude as string | number | undefined);
+    const alt =
+      (editableProperty?.asnm as string | number | null | undefined) ??
+      (visitPropertyData?.asnm as string | number | null | undefined);
+    const coordLine =
+      [lat ? `Lat: ${lat}` : null, lng ? `Lng: ${lng}` : null, alt !== undefined && alt !== null ? `Alt: ${alt}m` : null]
+        .filter(Boolean)
+        .join(", ") || "Coordenadas N/D";
+
+    const visitTimestamp =
+      (editableVisit as any)?.date_hour_end ??
+      (editableVisit as any)?.visit_date ??
+      visitDetail?.date_hour_end ??
+      visitDetail?.visit_date;
+    const timestampLabel = formatVisitStamp(visitTimestamp) ?? "Fecha/Hora N/D";
+
+    const department =
+      (editableProperty?.state as string | undefined) ??
+      (visitPropertyData?.state as string | undefined);
+    const municipality =
+      (editableProperty?.municipality as string | undefined) ??
+      (editableProperty?.city as string | undefined) ??
+      (visitPropertyData?.municipality as string | undefined) ??
+      (visitPropertyData?.city as string | undefined);
+    const village =
+      (editableProperty?.village as string | undefined) ??
+      (visitPropertyData?.village as string | undefined);
+    const propertyName =
+      (editableProperty?.name as string | undefined) ??
+      (visitPropertyData?.name as string | undefined);
+    const locationLine = [department, municipality, village, propertyName]
+      .filter(Boolean)
+      .join(", ") || "Ubicación N/D";
+
+    const attended =
+      (editableVisit?.name_acompanamiento as string | undefined) ??
+      (editableVisit?.attended_by as string | undefined) ??
+      "Encuestado N/D";
+    const extensionistName = visitExtensionist?.name ?? "Extensión N/D";
+    const personLine =
+      [
+        propertyName ? `Predio: ${propertyName}` : null,
+        `Encuestado: ${attended}`,
+        `Ext: ${extensionistName}`,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "Encuestado / Extensión N/D";
+
+    return {
+      coordLine,
+      dateLine: `${timestampLabel} · ${locationLine}`,
+      personLine,
+    };
+  }, [
+    editableProperty?.latitude,
+    editableProperty?.longitude,
+    editableProperty?.asnm,
+    editableProperty?.state,
+    editableProperty?.municipality,
+    editableProperty?.city,
+    editableProperty?.village,
+    editableProperty?.name,
+    visitPropertyData?.latitude,
+    visitPropertyData?.longitude,
+    visitPropertyData?.asnm,
+    visitPropertyData?.state,
+    visitPropertyData?.municipality,
+    visitPropertyData?.city,
+    visitPropertyData?.village,
+    visitPropertyData?.name,
+    editableVisit?.name_acompanamiento,
+    editableVisit?.attended_by,
+    visitExtensionist?.name,
+    visitDetail?.date_hour_end,
+    visitDetail?.visit_date,
+    (editableVisit as any)?.date_hour_end,
+    (editableVisit as any)?.visit_date,
+  ]);
 
   useEffect(() => {
     if (visitDetail) {
@@ -1624,12 +1819,219 @@ const getTimePart = (value?: string | null) => {
   };
 
   const handleFileChange = (
-    key: keyof typeof updateFiles,
+    key: UploadFileKey,
     files: FileList | null,
   ) => {
     clearUpdateFeedback();
     const file = files?.[0];
     setUpdateFiles((prev) => ({ ...prev, [key]: file || undefined }));
+  };
+
+  const handleFileChangeWithPreview = (
+    key: UploadFileKey,
+    files: FileList | null,
+  ) => {
+    handleFileChange(key, files);
+    const file = files?.[0];
+    setPhotoPreviewUrls((prev) => {
+      const next = { ...prev };
+      const previousUrl = prev[key];
+      if (previousUrl) {
+        URL.revokeObjectURL(previousUrl);
+      }
+      if (file) {
+        next[key] = URL.createObjectURL(file);
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
+  };
+
+  const generateWatermarkedFile = useCallback(
+    async (file: File, mode: "normal" | "compact" = "normal") => {
+      const imgUrl = URL.createObjectURL(file);
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = imgUrl;
+      });
+      URL.revokeObjectURL(imgUrl);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        throw new Error("No fue posible preparar el lienzo para la imagen.");
+      }
+      ctx.drawImage(image, 0, 0);
+
+      const padding = Math.max(canvas.width * 0.018, 16);
+      const blockHeight =
+        mode === "compact"
+          ? Math.max(canvas.height * 0.12, 110)
+          : Math.max(canvas.height * 0.18, 160);
+      const gradient = ctx.createLinearGradient(
+        0,
+        canvas.height - blockHeight,
+        0,
+        canvas.height,
+      );
+      gradient.addColorStop(0, "rgba(0,0,0,0)");
+      gradient.addColorStop(1, "rgba(0,0,0,0.7)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, canvas.height - blockHeight, canvas.width, blockHeight);
+
+      ctx.fillStyle = "white";
+      const fontSize =
+        mode === "compact"
+          ? Math.max(Math.round(canvas.width * 0.014), 14)
+          : Math.max(Math.round(canvas.width * 0.018), 18);
+      ctx.font = `${fontSize}px "Inter", system-ui, -apple-system, sans-serif`;
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 6;
+
+      const lines = [
+        watermarkText.coordLine,
+        watermarkText.dateLine,
+        watermarkText.personLine,
+      ];
+      lines.forEach((line, index) => {
+        ctx.fillText(
+          line,
+          padding,
+          canvas.height - blockHeight / 1.6 + index * (fontSize + 6),
+          canvas.width - padding * 2,
+        );
+      });
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.92),
+      );
+      if (!blob) {
+        throw new Error("No se pudo generar la imagen marcada.");
+      }
+      const baseName = file.name.replace(/\.[^/.]+$/, "") || "foto";
+      return new File([blob], `${baseName}-marcada.jpg`, {
+        type: "image/jpeg",
+        lastModified: Date.now(),
+      });
+    },
+    [watermarkText.coordLine, watermarkText.dateLine, watermarkText.personLine],
+  );
+
+  const generateBlackBarFile = useCallback(async (file: File) => {
+    const imgUrl = URL.createObjectURL(file);
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = imgUrl;
+    });
+    URL.revokeObjectURL(imgUrl);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("No fue posible preparar el lienzo.");
+
+    ctx.drawImage(image, 0, 0);
+    const barHeight = Math.max(canvas.height * 0.14, 120);
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.92),
+    );
+    if (!blob) throw new Error("No se pudo generar la imagen corregida.");
+    const baseName = file.name.replace(/\.[^/.]+$/, "") || "foto";
+    return new File([blob], `${baseName}-corregida.jpg`, {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  }, []);
+
+  const handleWatermarkedUpload = async (
+    key: UploadFileKey,
+    files: FileList | null,
+    mode: "normal" | "compact" = "normal",
+  ) => {
+    clearUpdateFeedback();
+    if (!files?.[0]) {
+      setUpdateFiles((prev) => ({
+        ...prev,
+        [key]: undefined,
+      }));
+      setPhotoPreviewUrls((prev) => {
+        const next = { ...prev };
+        if (next[key]) {
+          URL.revokeObjectURL(next[key] as string);
+          delete next[key];
+        }
+        return next;
+      });
+      return;
+    }
+
+    const baseFile = files[0];
+    try {
+      setIsProcessingUpload(true);
+      const markedFile = await generateWatermarkedFile(baseFile, mode);
+      setUpdateFiles((prev) => ({
+        ...prev,
+        [key]: markedFile,
+      }));
+      setPhotoPreviewUrls((prev) => {
+        const next = { ...prev };
+        if (next[key]) {
+          URL.revokeObjectURL(next[key] as string);
+          delete next[key];
+        }
+        next[key] = URL.createObjectURL(markedFile);
+        return next;
+      });
+    } catch (error) {
+      setUpdateError("No se pudo generar la imagen con marca. Intenta de nuevo.");
+    } finally {
+      setIsProcessingUpload(false);
+    }
+  };
+
+  const handleBlackBarUpload = async (key: UploadFileKey, files: FileList | null) => {
+    clearUpdateFeedback();
+    if (!files?.[0]) {
+      setUpdateFiles((prev) => ({ ...prev, [key]: undefined }));
+      setPhotoPreviewUrls((prev) => {
+        const next = { ...prev };
+        if (next[key]) {
+          URL.revokeObjectURL(next[key] as string);
+          delete next[key];
+        }
+        return next;
+      });
+      return;
+    }
+    try {
+      setIsProcessingUpload(true);
+      const fixedFile = await generateBlackBarFile(files[0]);
+      setUpdateFiles((prev) => ({ ...prev, [key]: fixedFile }));
+      setPhotoPreviewUrls((prev) => {
+        const next = { ...prev };
+        if (next[key]) {
+          URL.revokeObjectURL(next[key] as string);
+          delete next[key];
+        }
+        next[key] = URL.createObjectURL(fixedFile);
+        return next;
+      });
+    } catch {
+      setUpdateError("No se pudo corregir la etiqueta. Intenta nuevamente.");
+    } finally {
+      setIsProcessingUpload(false);
+    }
   };
   const matchedDepartment =
     typeof editableProperty?.state === "string"
@@ -1740,6 +2142,7 @@ const getTimePart = (value?: string | null) => {
         );
       }
       setUpdateFiles({});
+      setPhotoPreviewUrls({});
       setUpdateMessage("Encuesta actualizada correctamente (sin clasificación).");
       await refetchSurveyVisit();
     } catch (error: unknown) {
@@ -1996,29 +2399,24 @@ const getTimePart = (value?: string | null) => {
                     ))}
                   </div>
 
-                  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-emerald-900">
-                      Resumen general
-                    </p>
-                    <p className="text-xs text-emerald-500">
-                      Totales de visitas y propiedades
-                    </p>
-                    <div className="mt-3">
-                      <GeneralSummaryChart
-                        totals={totals ?? {
-                          survey_1: 0,
-                          survey_2: 0,
-                          survey_3: 0,
-                          all_types: 0,
-                        }}
-                        propertiesTotals={propertiesTotals ?? {
-                          magdalena: 0,
-                          atlantico: 0,
-                          total_magdalena_atlantico: 0,
-                        }}
-                      />
+                    <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Resumen general
+                      </p>
+                      <p className="text-xs text-emerald-500">
+                        Totales de visitas
+                      </p>
+                      <div className="mt-3">
+                        <GeneralSummaryChart
+                          totals={totals ?? {
+                            survey_1: 0,
+                            survey_2: 0,
+                            survey_3: 0,
+                            all_types: 0,
+                          }}
+                        />
+                      </div>
                     </div>
-                  </div>
 
                   <div className="grid gap-4 lg:grid-cols-3">
                     <div className="md:col-span-2 xl:col-span-2 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
@@ -2028,7 +2426,7 @@ const getTimePart = (value?: string | null) => {
                       <p className="text-xs text-emerald-500">
                         Totales de visitas 1, 2 y 3 por departamento
                       </p>
-                      {departmentRows.length > 0 ? (
+                      {departmentTableRows.length > 0 ? (
                         <div className="mt-3 overflow-x-auto -mx-4 md:mx-0">
                           <table className="min-w-full divide-y divide-emerald-100 text-sm">
                             <thead className="bg-emerald-50/80">
@@ -2041,7 +2439,7 @@ const getTimePart = (value?: string | null) => {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-emerald-50">
-                              {departmentRows.map((row) => (
+                              {departmentTableRows.map((row) => (
                                 <tr key={row.state}>
                                   <td className="px-2 md:px-3 py-2 font-semibold text-emerald-900 text-xs md:text-sm">
                                     {row.state}
@@ -2080,288 +2478,226 @@ const getTimePart = (value?: string | null) => {
 
                     <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
                       <p className="text-sm font-semibold text-emerald-900">
-                        Ciudades con más visitas
+                        Subregiones con más avances (Magdalena)
                       </p>
                       <p className="text-xs text-emerald-500">
-                        Top ciudades por total de visitas
+                        Top subregiones de Magdalena por total de visitas
                       </p>
                       <div className="mt-3">
                         {statsLoading ? (
                           <SkeletonChart />
-                        ) : topCities.length > 0 ? (
-                          <CityChart data={topCities} />
+                        ) : topSubregionsMagdalena.length > 0 ? (
+                          <CityChart data={topSubregionsMagdalena} />
                         ) : (
-                          <p className="text-sm text-emerald-500">
-                            Sin registros de ciudades.
-                          </p>
+                          <p className="text-sm text-emerald-500">Sin registros de subregiones.</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Subregiones con más avances (Atlántico)
+                      </p>
+                      <p className="text-xs text-emerald-500">
+                        Top subregiones de Atlántico por total de visitas
+                      </p>
+                      <div className="mt-3">
+                        {statsLoading ? (
+                          <SkeletonChart />
+                        ) : topSubregionsAtlantico.length > 0 ? (
+                          <CityChart data={topSubregionsAtlantico} />
+                        ) : (
+                          <p className="text-sm text-emerald-500">Sin registros de subregiones.</p>
                         )}
                       </div>
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-emerald-900">
-                          Resumen por ciudad
-                        </p>
-                        <p className="text-xs text-emerald-500">
-                          Selecciona departamento y ciudad para ver visitas y estados.
-                        </p>
-                      </div>
-                      <div className="flex flex-col gap-2 md:flex-row">
-                        <label className="text-sm font-semibold text-emerald-700">
-                          Departamento
-                          <select
-                            className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                            value={summaryDepartment}
-                            onChange={(e) => {
-                              const dept = e.target.value as (typeof SUMMARY_DEPARTMENTS)[number];
-                              setSummaryDepartment(dept);
-                              const nextCity = SUMMARY_CITIES[dept]?.[0] ?? "";
-                              setSummaryCity(nextCity);
-                            }}
+                    <p className="text-sm font-semibold text-emerald-900">
+                      Estadística consolidada por departamento
+                    </p>
+                    <p className="text-xs text-emerald-500">
+                      Visitas y estados de workflow por departamento.
+                    </p>
+                    <div className="mt-3 overflow-x-auto -mx-4 md:mx-0">
+                      <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                        <thead className="bg-emerald-50/80 text-emerald-600">
+                          <tr className="text-left">
+                            <th className="px-3 py-2 font-semibold">Departamento</th>
+                            <th className="px-3 py-2 text-center font-semibold">V1</th>
+                            <th className="px-3 py-2 text-center font-semibold">V2</th>
+                            <th className="px-3 py-2 text-center font-semibold">V3</th>
+                            <th className="px-3 py-2 text-center font-semibold">Total visitas</th>
+                            <th className="px-3 py-2 text-center font-semibold">Pendientes</th>
+                            <th className="px-3 py-2 text-center font-semibold">Aceptados</th>
+                            <th className="px-3 py-2 text-center font-semibold">Rechazados</th>
+                            <th className="px-3 py-2 text-center font-semibold">Total workflow</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-emerald-50">
+                          {departmentStatsRows.map((row) => (
+                            <tr key={`stats-${row.department}`}>
+                              <td className="px-3 py-2 font-semibold text-emerald-900">
+                                {row.department}
+                              </td>
+                              <td className="px-3 py-2 text-center">{row.visit_1}</td>
+                              <td className="px-3 py-2 text-center">{row.visit_2}</td>
+                              <td className="px-3 py-2 text-center">{row.visit_3}</td>
+                              <td className="px-3 py-2 text-center font-semibold text-emerald-900">
+                                {row.visit_total}
+                              </td>
+                              <td className="px-3 py-2 text-center">{row.pending}</td>
+                              <td className="px-3 py-2 text-center">{row.accepted}</td>
+                              <td className="px-3 py-2 text-center">{row.rejected}</td>
+                              <td className="px-3 py-2 text-center font-semibold text-emerald-900">
+                                {row.workflow_total}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="bg-emerald-50/60 font-semibold text-emerald-900">
+                            <td className="px-3 py-2">Total</td>
+                            <td className="px-3 py-2 text-center">{departmentStatsTotals.visit_1}</td>
+                            <td className="px-3 py-2 text-center">{departmentStatsTotals.visit_2}</td>
+                            <td className="px-3 py-2 text-center">{departmentStatsTotals.visit_3}</td>
+                            <td className="px-3 py-2 text-center">{departmentStatsTotals.visit_total}</td>
+                            <td className="px-3 py-2 text-center">{departmentStatsTotals.pending}</td>
+                            <td className="px-3 py-2 text-center">{departmentStatsTotals.accepted}</td>
+                            <td className="px-3 py-2 text-center">{departmentStatsTotals.rejected}</td>
+                            <td className="px-3 py-2 text-center">{departmentStatsTotals.workflow_total}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-emerald-900">
+                      Gráfica de torta: porcentaje por visita
+                    </p>
+                    <p className="text-xs text-emerald-500">
+                      Muestra el avance (%) de cada departamento por tipo de visita.
+                    </p>
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      {pieChartsByDepartment.map(({ department, basePopulation, data }) => (
+                        <div
+                          key={department}
+                          className="rounded-lg border border-emerald-100 bg-white/70 p-4 shadow-sm"
+                        >
+                          <p className="text-sm font-semibold text-emerald-800">{department}</p>
+                          <p className="mt-1 text-xs text-emerald-600">
+                            Base del 100%: {basePopulation} usuarios
+                          </p>
+                          <div className="mt-4 space-y-4">
+                            {data.map((entry) => {
+                              const safePercent = Math.max(0, Math.min(entry.percent, 100));
+                              return (
+                                <div key={`${department}-${entry.visitType}`}>
+                                  <div className="mb-1 flex items-center justify-between text-xs font-semibold text-emerald-800">
+                                    <span>{entry.name}</span>
+                                    <span>
+                                      {entry.percent}% ({entry.count}/{entry.populationBase})
+                                    </span>
+                                  </div>
+                                  <div className="h-4 w-full rounded-full bg-emerald-100/70">
+                                    <div
+                                      className="h-4 rounded-full transition-all duration-300"
+                                      style={{
+                                        width: `${safePercent}%`,
+                                        backgroundColor: entry.color,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-emerald-900">
+                      Estados del workflow
+                    </p>
+                    <p className="text-xs text-emerald-500">
+                      Vista general y distribución por departamento.
+                    </p>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      {workflowStateMeta.map((meta) => {
+                        const value = workflowTotals[meta.key] ?? 0;
+                        const percent = workflowTotalCount > 0 ? (value / workflowTotalCount) * 100 : 0;
+                        return (
+                          <div
+                            key={`total-${meta.key}`}
+                            className="rounded-lg border border-emerald-100 p-3"
+                            style={{ backgroundColor: meta.chipBg }}
                           >
-                            {SUMMARY_DEPARTMENTS.map((dept) => (
-                              <option key={dept} value={dept}>
-                                {dept}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="text-sm font-semibold text-emerald-700">
-                          Ciudad
-                          <select
-                            className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                            value={selectedSummaryCity}
-                            onChange={(e) => {
-                              setSummaryCity(e.target.value);
-                            }}
-                          >
-                            {summaryCityOptions.map((city) => (
-                              <option key={city} value={city}>
-                                {city}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
+                            <p className="text-xs font-semibold" style={{ color: meta.chipColor }}>
+                              {meta.label}
+                            </p>
+                            <p className="mt-1 text-xl font-semibold text-emerald-900">{value}</p>
+                            <p className="text-xs text-emerald-700">{percent.toFixed(2)}% del total</p>
+                          </div>
+                        );
+                      })}
                     </div>
 
-                    {citySummaryLoading ? (
-                      <p className="mt-3 text-sm text-emerald-500">
-                        Cargando resumen de ciudad…
-                      </p>
-                    ) : citySummaryError ? (
-                      <p className="mt-3 text-sm text-red-600">
-                        {citySummaryFetchError?.message ??
-                          "No fue posible cargar el resumen de la ciudad."}
-                      </p>
-                    ) : citySummary ? (
-                      <div className="mt-4 space-y-4">
-                        <div className="grid gap-3 md:grid-cols-4">
-                          <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
-                            <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-                              Ciudad seleccionada
-                            </p>
-                            <p className="text-lg font-semibold text-emerald-900">
-                              {selectedSummaryCity || "N/D"}
-                            </p>
-                            <p className="text-xs text-emerald-500">
-                              Departamento: {summaryDepartment}
-                            </p>
-                          </div>
-                          <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
-                            <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-                              Predios
-                            </p>
-                            <p className="text-lg font-semibold text-emerald-900">
-                              {citySummary.properties_count ?? 0}
-                            </p>
-                          </div>
-                          <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
-                            <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-                              Total visitas
-                            </p>
-                            <p className="text-lg font-semibold text-emerald-900">
-                              {(citySummary.summary?.survey_1?.count ?? 0) +
-                                (citySummary.summary?.survey_2?.count ?? 0) +
-                                (citySummary.summary?.survey_3?.count ?? 0)}
-                            </p>
-                          </div>
-                          <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
-                            <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-                              Última creación
-                            </p>
-                            <p className="text-sm font-semibold text-emerald-900">
-                              {[
-                                citySummary.summary?.survey_1?.latest_created_at,
-                                citySummary.summary?.survey_2?.latest_created_at,
-                                citySummary.summary?.survey_3?.latest_created_at,
-                              ]
-                                .filter(Boolean)
-                                .map((date) => formatDate(date as string))
-                                .join(" · ") || "N/D"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
-                          <p className="text-sm font-semibold text-emerald-900">
-                            Resumen por tipo de visita
-                          </p>
-                          <div className="mt-3 overflow-x-auto">
-                            <table className="min-w-full divide-y divide-emerald-100 text-sm">
-                              <thead className="bg-emerald-50/80 text-emerald-600">
-                                <tr className="text-left">
-                                  <th className="px-3 py-2 font-semibold">Tipo</th>
-                                  <th className="px-3 py-2 font-semibold">Cantidad</th>
-                                  <th className="px-3 py-2 font-semibold">Última fecha</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-emerald-50">
-                                {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
-                                  const label = `Visita ${idx + 1}`;
-                                  const summary = citySummary.summary?.[key];
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      {workflowDepartmentEntries.length > 0 ? (
+                        workflowDepartmentEntries.map(([department, values]) => {
+                          const departmentTotal =
+                            (values.pending ?? 0) + (values.accepted ?? 0) + (values.rejected ?? 0);
+                          return (
+                            <div
+                              key={`workflow-${department}`}
+                              className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4"
+                            >
+                              <div className="mb-3 flex items-center justify-between">
+                                <p className="text-sm font-semibold text-emerald-900">{department}</p>
+                                <span className="text-xs font-semibold text-emerald-700">
+                                  Total: {departmentTotal}
+                                </span>
+                              </div>
+                              <div className="space-y-3">
+                                {workflowStateMeta.map((meta) => {
+                                  const value = values[meta.key] ?? 0;
+                                  const percent =
+                                    departmentTotal > 0 ? (value / departmentTotal) * 100 : 0;
+                                  const safePercent = Math.max(0, Math.min(percent, 100));
                                   return (
-                                    <tr key={key}>
-                                      <td className="px-3 py-2 text-emerald-900">{label}</td>
-                                      <td className="px-3 py-2 font-semibold text-emerald-900">
-                                        {summary?.count ?? 0}
-                                      </td>
-                                      <td className="px-3 py-2 text-emerald-700">
-                                        {summary?.latest_created_at
-                                          ? formatDate(summary.latest_created_at)
-                                          : "N/D"}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
-                          <p className="text-sm font-semibold text-emerald-900">
-                            Estados por tipo
-                          </p>
-                          <div className="mt-3 overflow-x-auto">
-                            <table className="min-w-full divide-y divide-emerald-100 text-sm">
-                              <thead className="bg-emerald-50/80 text-emerald-600">
-                                <tr className="text-left">
-                                  <th className="px-3 py-2 font-semibold">Tipo</th>
-                                  <th className="px-3 py-2 font-semibold">Pending</th>
-                                  <th className="px-3 py-2 font-semibold">Accepted</th>
-                                  <th className="px-3 py-2 font-semibold">Rejected</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-emerald-50">
-                                {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
-                                  const label = `Visita ${idx + 1}`;
-                                  const stateCountsRaw = citySummary.states_summary?.[key];
-                                  const stateCounts = Array.isArray(stateCountsRaw)
-                                    ? (stateCountsRaw as StateCountEntry[]).reduce<Record<string, number>>(
-                                      (acc, item) => {
-                                        if (item?.value) {
-                                          acc[item.value] = item.count ?? 0;
-                                        }
-                                        return acc;
-                                      },
-                                      {},
-                                    )
-                                    : stateCountsRaw ?? {};
-                                  return (
-                                    <tr key={key}>
-                                      <td className="px-3 py-2 text-emerald-900">{label}</td>
-                                      {["pending", "accepted", "rejected"].map((state) => (
-                                        <td key={state} className="px-3 py-2">
-                                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                                            {stateCounts[state] ?? 0}
-                                          </span>
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border border-emerald-100 bg-white p-3 shadow-sm">
-                          <p className="text-sm font-semibold text-emerald-900">
-                            Predios en la ciudad
-                          </p>
-                          <p className="text-xs text-emerald-500">
-                            Conteos por predio y tipo de visita.
-                          </p>
-                          <div className="mt-3 overflow-x-auto">
-                            <table className="min-w-full divide-y divide-emerald-100 text-sm">
-                              <thead className="bg-emerald-50/80 text-emerald-600">
-                                <tr className="text-left">
-                                  <th className="px-3 py-2 font-semibold">Predio</th>
-                                  <th className="px-3 py-2 font-semibold">Visita 1</th>
-                                  <th className="px-3 py-2 font-semibold">Visita 2</th>
-                                  <th className="px-3 py-2 font-semibold">Visita 3</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-emerald-50">
-                                {citySummary.properties?.map((prop) => (
-                                  <tr key={`${prop.property?.id ?? prop.property?.name ?? Math.random()}`}>
-                                    <td className="px-3 py-2">
-                                      <div className="flex flex-col">
-                                        <span className="font-semibold text-emerald-900">
-                                          {prop.property?.name ?? "Predio sin nombre"}
-                                        </span>
-                                        <span className="text-xs text-emerald-500">
-                                          {prop.property?.city ?? "Ciudad N/D"} ·{" "}
-                                          {prop.property?.state ?? "Depto N/D"}
+                                    <div key={`${department}-${meta.key}`}>
+                                      <div className="mb-1 flex items-center justify-between text-xs font-semibold text-emerald-800">
+                                        <span>{meta.label}</span>
+                                        <span>
+                                          {value} ({percent.toFixed(2)}%)
                                         </span>
                                       </div>
-                                    </td>
-                                    {(["survey_1", "survey_2", "survey_3"] as const).map((key, idx) => {
-                                      const bucket = prop[key];
-                                      return (
-                                        <td key={key} className="px-3 py-2">
-                                          <div className="space-y-1 rounded-lg border border-emerald-100 bg-emerald-50/70 p-2">
-                                            <p className="text-xs font-semibold text-emerald-900">
-                                              Visita {idx + 1}: {bucket?.count ?? 0}
-                                            </p>
-                                            {bucket?.latest_created_at ? (
-                                              <p className="text-[11px] text-emerald-700">
-                                                Última: {formatDate(bucket.latest_created_at)}
-                                              </p>
-                                            ) : null}
-                                            {bucket?.states ? (
-                                              <div className="flex flex-wrap gap-1 text-[11px] text-emerald-800">
-                                                {Object.entries(bucket.states).map(([state, count]) => (
-                                                  <span
-                                                    key={state}
-                                                    className="rounded-full bg-white px-2 py-1 font-semibold"
-                                                  >
-                                                    {state}: {count}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            ) : null}
-                                          </div>
-                                        </td>
-                                      );
-                                    })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="mt-3 text-sm text-emerald-500">
-                        Selecciona una ciudad para ver el resumen.
-                      </p>
-                    )}
+                                      <div className="h-3 w-full rounded-full bg-emerald-100/70">
+                                        <div
+                                          className="h-3 rounded-full transition-all duration-300"
+                                          style={{
+                                            width: `${safePercent}%`,
+                                            backgroundColor: meta.color,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-emerald-500">
+                          Sin datos de workflow por departamento.
+                        </p>
+                      )}
+                    </div>
                   </div>
+
                 </>
               ) : (
                 <p className="text-sm text-emerald-500">
@@ -4356,128 +4692,81 @@ const getTimePart = (value?: string | null) => {
                                     ? "5.20 Registro Fotográfico visita"
                                     : "5.5 Registro Fotográfico visita"}
                                 </p>
-                                {photoGallery.length > 0 ? (
-                                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                    {photoGallery.map((photo) => (
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                                  {[
+                                    { key: "photo_user" as UploadFileKey, label: "Foto del productor" },
+                                    { key: "photo_interaction" as UploadFileKey, label: "Foto de interacción" },
+                                    { key: "photo_panorama" as UploadFileKey, label: "Panorama" },
+                                    { key: "phono_extra_1" as UploadFileKey, label: "Foto adicional" },
+                                  ].map((item) => {
+                                    const visitUrl = normalizeMediaUrl((visitDetail as any)?.[item.key]);
+                                    const previewUrl = photoPreviewUrls[item.key];
+                                    const currentUrl = previewUrl ?? visitUrl ?? null;
+                                    return (
                                       <div
-                                        key={photo.label}
-                                        className="overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-sm"
+                                        key={item.key}
+                                        className="flex flex-col overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-sm"
                                       >
                                         <div
-                                          className="cursor-pointer"
-                                          onClick={() => setSelectedImageUrl(photo.url)}
+                                          className="relative h-44 cursor-pointer bg-emerald-50"
+                                          onClick={() => currentUrl && setSelectedImageUrl(currentUrl)}
                                         >
-                                          <img
-                                            src={photo.url}
-                                            alt={photo.label}
-                                            loading="eager"
-                                            className="h-44 w-full object-cover transition hover:opacity-90"
-                                            style={{ width: "100%", height: "176px" }}
-                                          />
+                                          {currentUrl ? (
+                                            <img
+                                              src={currentUrl}
+                                              alt={item.label}
+                                              className="h-full w-full object-cover transition hover:opacity-90"
+                                            />
+                                          ) : (
+                                            <div className="flex h-full items-center justify-center px-3 text-center text-sm text-emerald-500">
+                                              {item.label}
+                                            </div>
+                                          )}
                                         </div>
-                                        <div className="flex items-center justify-between px-3 py-2">
+                                        <div className="flex items-center justify-between gap-2 px-3 py-2">
                                           <p className="text-sm font-semibold text-emerald-900">
-                                            {photo.label}
+                                            {item.label}
                                           </p>
-                                          <button
-                                            type="button"
-                                            className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
-                                            onClick={() => setSelectedImageUrl(photo.url)}
-                                          >
-                                            Ver grande
-                                          </button>
+                                          <div className="flex items-center gap-2">
+                                            {currentUrl ? (
+                                              <button
+                                                type="button"
+                                                className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+                                                onClick={() => setSelectedImageUrl(currentUrl)}
+                                              >
+                                                Ver grande
+                                              </button>
+                                            ) : null}
+                                            <button
+                                              type="button"
+                                              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:text-emerald-900"
+                                              onClick={() => {
+                                                setUploadTarget(item);
+                                                setUploadOptionsOpen(true);
+                                              }}
+                                            >
+                                              <FiUpload aria-hidden />
+                                              Subir
+                                            </button>
+                                          </div>
                                         </div>
+                                        {updateFiles[item.key] ? (
+                                          <p className="px-3 pb-3 text-[11px] text-emerald-600">
+                                            Listo: {updateFiles[item.key]?.name}
+                                          </p>
+                                        ) : null}
                                       </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="mt-2 grid gap-2 text-sm text-emerald-800 sm:grid-cols-2 lg:grid-cols-4">
-                                    {["archivo imagen 1", "archivo imagen 2", "archivo imagen 3", "archivo imagen 4"].map(
-                                      (label) => (
-                                        <div
-                                          key={label}
-                                          className="flex h-32 items-center justify-center rounded-md border border-dashed border-emerald-200 bg-white text-emerald-500"
-                                        >
-                                          {label}
-                                        </div>
-                                      ),
-                                    )}
-                                  </div>
-                                )}
-                                <div className="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                                  <label className="text-sm font-semibold text-emerald-700">
-                                    Subir nueva foto del productor (opcional)
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                      onChange={(e) =>
-                                        handleFileChange("photo_user", e.target.files)
-                                      }
-                                    />
-                                    {updateFiles.photo_user ? (
-                                      <span className="text-xs text-emerald-600">
-                                        Listo: {updateFiles.photo_user.name}
-                                      </span>
-                                    ) : null}
-                                  </label>
-                                  <label className="text-sm font-semibold text-emerald-700">
-                                    Subir nueva foto de interacción (opcional)
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                      onChange={(e) =>
-                                        handleFileChange("photo_interaction", e.target.files)
-                                      }
-                                    />
-                                    {updateFiles.photo_interaction ? (
-                                      <span className="text-xs text-emerald-600">
-                                        Listo: {updateFiles.photo_interaction.name}
-                                      </span>
-                                    ) : null}
-                                  </label>
-                                  <label className="text-sm font-semibold text-emerald-700">
-                                    Subir panorama (opcional)
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                      onChange={(e) =>
-                                        handleFileChange("photo_panorama", e.target.files)
-                                      }
-                                    />
-                                    {updateFiles.photo_panorama ? (
-                                      <span className="text-xs text-emerald-600">
-                                        Listo: {updateFiles.photo_panorama.name}
-                                      </span>
-                                    ) : null}
-                                  </label>
-                                  <label className="text-sm font-semibold text-emerald-700">
-                                    Subir foto adicional (opcional)
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                      onChange={(e) =>
-                                        handleFileChange("phono_extra_1", e.target.files)
-                                      }
-                                    />
-                                    {updateFiles.phono_extra_1 ? (
-                                      <span className="text-xs text-emerald-600">
-                                        Listo: {updateFiles.phono_extra_1.name}
-                                      </span>
-                                    ) : null}
-                                  </label>
+                                    );
+                                  })}
+                                </div>
+                                <div className="mt-3 grid gap-2 md:grid-cols-3">
                                   <label className="text-sm font-semibold text-emerald-700">
                                     Subir PDF (opcional)
                                     <input
                                       type="file"
                                       accept="application/pdf"
                                       className="mt-1 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                      onChange={(e) =>
-                                        handleFileChange("file_pdf", e.target.files)
-                                      }
+                                      onChange={(e) => handleFileChange("file_pdf", e.target.files)}
                                     />
                                     {updateFiles.file_pdf ? (
                                       <span className="text-xs text-emerald-600">
@@ -4741,7 +5030,7 @@ const getTimePart = (value?: string | null) => {
                   Exportar Excel de encuestas
                 </p>
                 <p className="text-xs text-emerald-500">
-                  Selecciona departamento y ciudad (opcional) para filtrar el archivo.
+                  Selecciona departamento y municipio (opcional) para filtrar el archivo.
                 </p>
               </div>
               <button
