@@ -1811,6 +1811,8 @@ const getTimePart = (value?: string | null) => {
     const visit3ExtraKeys = [
       "final_diagnosis",
       "development_accompaniment",
+      "previous_visit_recommendations_fulfilled",
+      "fulfilled_previous_recommendations",
     ];
 
     const allowedKeys = selectedVisit === 2
@@ -4508,23 +4510,56 @@ const getTimePart = (value?: string | null) => {
                                     5.3 Se Cumplió con las recomendaciones de la visita Anterior
                                   </p>
                                   <div className="mt-2 flex flex-wrap gap-2">
-                                    {["SI", "NO", "No aplica"].map((option) => {
-                                      const isActive =
-                                        (editableVisit?.compliance_status as string) === option;
-                                      return (
-                                        <button
-                                          key={option}
-                                          type="button"
-                                          className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
-                                            ? "bg-emerald-900 text-white"
-                                            : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
-                                            }`}
-                                          onClick={() => updateVisitField("compliance_status", option)}
-                                        >
-                                          {option}
-                                        </button>
-                                      );
-                                    })}
+                                    {selectedVisit === 3
+                                      ? [
+                                          { label: "Sí", value: true },
+                                          { label: "No", value: false },
+                                        ].map((option) => {
+                                          const isActive =
+                                            (editableVisit?.previous_visit_recommendations_fulfilled ??
+                                              (editableVisit as any)
+                                                ?.fulfilled_previous_recommendations) ===
+                                            option.value;
+                                          return (
+                                            <button
+                                              key={option.label}
+                                              type="button"
+                                              className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
+                                                ? "bg-emerald-900 text-white"
+                                                : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                                }`}
+                                              onClick={() => {
+                                                updateVisitField(
+                                                  "previous_visit_recommendations_fulfilled",
+                                                  option.value,
+                                                );
+                                                updateVisitField(
+                                                  "fulfilled_previous_recommendations",
+                                                  option.value,
+                                                );
+                                              }}
+                                            >
+                                              {option.label}
+                                            </button>
+                                          );
+                                        })
+                                      : ["SI", "NO", "No aplica"].map((option) => {
+                                          const isActive =
+                                            (editableVisit?.compliance_status as string) === option;
+                                          return (
+                                            <button
+                                              key={option}
+                                              type="button"
+                                              className={`rounded-md px-3 py-2 text-sm font-semibold transition ${isActive
+                                                ? "bg-emerald-900 text-white"
+                                                : "bg-white text-emerald-800 ring-1 ring-emerald-200 hover:ring-emerald-300"
+                                                }`}
+                                              onClick={() => updateVisitField("compliance_status", option)}
+                                            >
+                                              {option}
+                                            </button>
+                                          );
+                                        })}
                                   </div>
                                 </div>
                               ) : null}
