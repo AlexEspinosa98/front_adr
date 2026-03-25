@@ -298,10 +298,12 @@ export interface PropertySurveyVisit {
   visit_development_follow_up_activities?: string;
   previous_visit_recommendations_fulfilled?: string | boolean;
   initial_diagnosis?: string;
+  final_diagnosis?: string;
   objective?: string;
   visit_followup?: string;
   fulfilled_previous_recommendations?: string | boolean;
   recommendations_commitments?: string;
+  development_accompaniment?: string;
   new_recommendations?: string;
   observations_seg?: string;
   register_coinnovation?: string;
@@ -600,6 +602,9 @@ export const fetchProducerSurveyVisit = async (
           survey.fulfilled_previous_recommendations,
       );
       const fulfilledPrev = prevFulfilled ?? survey.fulfilled_previous_recommendations;
+      const visitDiagnosis = survey.initial_diagnosis ?? survey.final_diagnosis;
+      const visitRecommendations =
+        survey.recommendations_commitments ?? survey.development_accompaniment;
       const localPracticeIdentified = normalizeBoolean(
         survey.local_practice_tool_technology_coinnovation_identified,
       );
@@ -612,6 +617,10 @@ export const fetchProducerSurveyVisit = async (
         objetive_accompaniment: objectiveAccompaniment,
         previous_visit_recommendations_fulfilled: prevFulfilled,
         fulfilled_previous_recommendations: fulfilledPrev,
+        initial_diagnosis: visitDiagnosis,
+        final_diagnosis: visitDiagnosis,
+        recommendations_commitments: visitRecommendations,
+        development_accompaniment: visitRecommendations,
         local_practice_tool_technology_coinnovation_identified: localPracticeIdentified,
         local_coinovation_or_technology_record: localCoinnovationRecord,
         visit_date: normalizedVisitDate,

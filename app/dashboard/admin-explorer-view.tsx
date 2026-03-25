@@ -356,6 +356,42 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
+const normalizeEditableVisit = (
+  visit?: PropertySurveyVisit | Record<string, unknown> | null,
+): EditableVisit | null => {
+  if (!visit) return null;
+
+  const rawVisit = visit as Record<string, unknown>;
+  const objectiveAccompaniment =
+    rawVisit.objective_accompaniment ?? rawVisit.objetive_accompaniment ?? "";
+  const previousVisitRecommendationsFulfilled =
+    rawVisit.previous_visit_recommendations_fulfilled ??
+    rawVisit.fulfilled_previous_recommendations;
+  const visitDiagnosis =
+    rawVisit.initial_diagnosis ?? rawVisit.final_diagnosis ?? "";
+  const visitRecommendations =
+    rawVisit.recommendations_commitments ??
+    rawVisit.development_accompaniment ??
+    "";
+
+  return {
+    ...(rawVisit as EditableVisit),
+    objective_accompaniment: objectiveAccompaniment as string | boolean,
+    objetive_accompaniment: objectiveAccompaniment as string | boolean,
+    previous_visit_recommendations_fulfilled:
+      previousVisitRecommendationsFulfilled as string | boolean,
+    fulfilled_previous_recommendations:
+      previousVisitRecommendationsFulfilled as string | boolean,
+    initial_diagnosis: visitDiagnosis as string,
+    final_diagnosis: visitDiagnosis as string,
+    recommendations_commitments: visitRecommendations as string,
+    development_accompaniment: visitRecommendations as string,
+    origen_register: (rawVisit.origen_register as string | undefined) ?? "app_movil",
+    attended_by: (rawVisit.attended_by as string | undefined) ?? "Usuario Productor",
+    approval_profile: (rawVisit.approval_profile as string | undefined) ?? "",
+  };
+};
+
 export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewProps) => {
   const { data: session } = useSession();
   const sessionWithToken = session as SessionWithToken | null;
@@ -1552,28 +1588,9 @@ const getTimePart = (value?: string | null) => {
 
   useEffect(() => {
     if (visitDetail) {
-      const normalizedVisit = {
-        ...visitDetail,
-        objective_accompaniment:
-          visitDetail.objective_accompaniment ??
-          (visitDetail as any)?.objetive_accompaniment ??
-          "",
-        objetive_accompaniment:
-          visitDetail.objective_accompaniment ??
-          (visitDetail as any)?.objetive_accompaniment ??
-          "",
-        previous_visit_recommendations_fulfilled:
-          visitDetail.previous_visit_recommendations_fulfilled ??
-          (visitDetail as any)?.fulfilled_previous_recommendations,
-        fulfilled_previous_recommendations:
-          visitDetail.previous_visit_recommendations_fulfilled ??
-          (visitDetail as any)?.fulfilled_previous_recommendations,
-        origen_register: visitDetail.origen_register ?? "app_movil",
-        attended_by: visitDetail.attended_by ?? "Usuario Productor",
-        approval_profile: visitDetail.approval_profile ?? "",
-      };
+      const normalizedVisit = normalizeEditableVisit(visitDetail);
       setEditableVisit(normalizedVisit);
-      setApprovalProfile(visitDetail.approval_profile ?? "");
+      setApprovalProfile((normalizedVisit?.approval_profile as string) ?? "");
       setInitialVisit(normalizedVisit as Record<string, unknown>);
     } else {
       setEditableVisit(null);
@@ -1639,6 +1656,35 @@ const getTimePart = (value?: string | null) => {
               ...prev,
               previous_visit_recommendations_fulfilled: value,
               fulfilled_previous_recommendations: value,
+            }
+          : prev,
+      );
+    }
+    if (key === "initial_diagnosis" || key === "final_diagnosis") {
+      const stringValue =
+        typeof value === "string" ? value : value ? "true" : "false";
+      setEditableVisit((prev) =>
+        prev
+          ? {
+              ...prev,
+              initial_diagnosis: stringValue,
+              final_diagnosis: stringValue,
+            }
+          : prev,
+      );
+    }
+    if (
+      key === "recommendations_commitments" ||
+      key === "development_accompaniment"
+    ) {
+      const stringValue =
+        typeof value === "string" ? value : value ? "true" : "false";
+      setEditableVisit((prev) =>
+        prev
+          ? {
+              ...prev,
+              recommendations_commitments: stringValue,
+              development_accompaniment: stringValue,
             }
           : prev,
       );
@@ -1762,9 +1808,16 @@ const getTimePart = (value?: string | null) => {
       "potential_replication",
       "observations_extensionist",
     ];
+    const visit3ExtraKeys = [
+      "final_diagnosis",
+      "development_accompaniment",
+    ];
 
-    const allowedKeys =
-      selectedVisit === 2 ? [...baseAllowedKeys, ...visit2ExtraKeys] : baseAllowedKeys;
+    const allowedKeys = selectedVisit === 2
+      ? [...baseAllowedKeys, ...visit2ExtraKeys]
+      : selectedVisit === 3
+      ? [...baseAllowedKeys, ...visit3ExtraKeys]
+      : baseAllowedKeys;
     return diffPayload(
       editableVisit as Record<string, unknown>,
       initialVisit,
@@ -2085,7 +2138,7 @@ const getTimePart = (value?: string | null) => {
         tokenType,
       });
       if (response?.data) {
-        setEditableVisit(response.data as Record<string, unknown>);
+        setEditableVisit(normalizeEditableVisit(response.data));
         setVisitDecision(state);
       }
       await refetchSurveyVisit();
@@ -2129,7 +2182,7 @@ const getTimePart = (value?: string | null) => {
         tokenType,
       });
       if (response?.data) {
-        setEditableVisit(response.data as Record<string, unknown>);
+        setEditableVisit(normalizeEditableVisit(response.data));
       }
       if (producerPayload) {
         setEditableProducer((prev) =>
@@ -4418,7 +4471,11 @@ const getTimePart = (value?: string | null) => {
                               />
                               <FieldInput
                                 label="5.1 Diagnóstico visita"
-                                value={editableVisit?.initial_diagnosis as string}
+                                value={
+                                  (editableVisit?.initial_diagnosis ??
+                                    (editableVisit as any)?.final_diagnosis ??
+                                    "") as string
+                                }
                                 onChange={(v) => updateVisitField("initial_diagnosis", v)}
                                 type="textarea"
                                 placeholder="Describa hallazgos y situación encontrada en la finca"
@@ -4434,7 +4491,11 @@ const getTimePart = (value?: string | null) => {
                               ) : null}
                               <FieldInput
                                 label="5.2 Recomendaciones  y Compromisos"
-                                value={editableVisit?.recommendations_commitments as string}
+                                value={
+                                  (editableVisit?.recommendations_commitments ??
+                                    (editableVisit as any)?.development_accompaniment ??
+                                    "") as string
+                                }
                                 onChange={(v) =>
                                   updateVisitField("recommendations_commitments", v)
                                 }
