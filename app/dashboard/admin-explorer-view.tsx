@@ -4459,20 +4459,6 @@ const getTimePart = (value?: string | null) => {
                             </SectionCard>
 
                             <SectionCard number="5." title="Enfoque Técnico Productivo">
-                              {selectedVisit !== 2 ? (
-                                <FieldInput
-                                  label="Objetivo del Acompañamiento"
-                                  value={
-                                    (editableVisit?.objective_accompaniment ??
-                                      (editableVisit as any)?.objetive_accompaniment ??
-                                      "") as string
-                                  }
-                                  onChange={(v) => updateVisitField("objective_accompaniment", v)}
-                                  type="textarea"
-                                  placeholder="Redacte y escriba el objetivo acorde a lo definido por la EPSEA"
-                                  highlight
-                                />
-                              ) : null}
                               <FieldInput
                                 label="5.1 Diagnóstico visita"
                                 value={
@@ -4569,10 +4555,23 @@ const getTimePart = (value?: string | null) => {
                                 onChange={(v) => updateVisitField("observations_visited", v)}
                                 type="textarea"
                               />
-                              {selectedVisit !== 2 ? (
-                                <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
+                              <FieldInput
+                                label="Objetivo del Acompañamiento"
+                                value={
+                                  (editableVisit?.objective_accompaniment ??
+                                    (editableVisit as any)?.objetive_accompaniment ??
+                                    "") as string
+                                }
+                                onChange={(v) => updateVisitField("objective_accompaniment", v)}
+                                type="textarea"
+                                placeholder="Redacte y escriba el objetivo acorde a lo definido por la EPSEA"
+                                highlight
+                              />
+                              <div className="rounded-lg border border-emerald-50 bg-emerald-50/60 p-3">
                                 <p className="text-xs uppercase tracking-[0.08em] text-emerald-600">
-                                  5.5 Registro Fotográfico visita
+                                  {selectedVisit === 2
+                                    ? "5.20 Registro Fotográfico visita"
+                                    : "5.5 Registro Fotográfico visita"}
                                 </p>
                                 <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                                   {[
@@ -4658,7 +4657,6 @@ const getTimePart = (value?: string | null) => {
                                   </label>
                                 </div>
                                 </div>
-                              ) : null}
                             </SectionCard>
 
                             {selectedVisit !== 2 && focalizationEntries.length > 0 ? (
