@@ -787,6 +787,54 @@ export const updateSurveyState = async ({
   return data;
 };
 
+type PhotoField = "photo_user" | "photo_interaction" | "photo_panorama" | "phono_extra_1";
+
+export interface UpdateSurveyPhotosInput {
+  surveyTypeId: number;
+  surveyId: number;
+  files?: Partial<Record<PhotoField, File>>;
+  removeFields?: PhotoField[];
+  token?: string;
+  tokenType?: string;
+}
+
+export interface UpdateSurveyPhotosResponse {
+  success?: boolean;
+  message?: string;
+  data?: {
+    photo_user?: string | null;
+    photo_interaction?: string | null;
+    photo_panorama?: string | null;
+    phono_extra_1?: string | null;
+    updated_at?: string;
+  };
+}
+
+export const updateSurveyPhotos = async ({
+  surveyTypeId,
+  surveyId,
+  files,
+  removeFields,
+  token,
+  tokenType = "Token",
+}: UpdateSurveyPhotosInput): Promise<UpdateSurveyPhotosResponse> => {
+  const formData = new FormData();
+  if (files) {
+    Object.entries(files).forEach(([key, value]) => {
+      if (value) formData.append(key, value);
+    });
+  }
+  if (removeFields?.length) {
+    formData.append("remove_fields", JSON.stringify(removeFields));
+  }
+  const { data } = await httpClient.patch<UpdateSurveyPhotosResponse>(
+    `/admin/surveys/${surveyTypeId}/${surveyId}/photos`,
+    formData,
+    { headers: authHeaders(token, tokenType) },
+  );
+  return data;
+};
+
 export const fetchPropertySurveyVisit = async (
   propertyId: number,
   visitNumber: number,

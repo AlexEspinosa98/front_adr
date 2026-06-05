@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk '/uploadOptionsOpen \\\\?/,/setUploadOptionsOpen\\\\\\(false\\\\\\)/' /Users/alex_espinosa/Documents/New_order/text_front/mi_front/app/dashboard/admin-explorer-view.tsx)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

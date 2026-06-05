@@ -52,6 +52,7 @@ import {
   updateSurveyState,
   basicUpdateSurvey,
   exportExtensionistExcel,
+  updateSurveyPhotos,
 } from "@/services/properties";
 import {
   fetchSurveyStatistics,
@@ -439,6 +440,11 @@ export const AdminExplorerView = ({ initialView = "stats" }: AdminExplorerViewPr
   const [uploadOptionsOpen, setUploadOptionsOpen] = useState(false);
   const [uploadTarget, setUploadTarget] = useState<{ key: UploadFileKey; label: string } | null>(null);
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  const [photoDeleteError, setPhotoDeleteError] = useState<string | null>(null);
+  const [photoDeleteMessage, setPhotoDeleteMessage] = useState<string | null>(null);
+  const [isDeletingPhoto, setIsDeletingPhoto] = useState(false);
+  const uploadWithMetaRef = useRef<HTMLInputElement>(null);
+  const uploadWithoutMetaRef = useRef<HTMLInputElement>(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportDepartment, setExportDepartment] =
     useState<(typeof SUMMARY_DEPARTMENTS)[number]>("Magdalena");
@@ -1537,7 +1543,7 @@ const getTimePart = (value?: string | null) => {
     const propertyName =
       (editableProperty?.name as string | undefined) ??
       (visitPropertyData?.name as string | undefined);
-    const locationLine = [department, municipality, village, propertyName]
+    const locationLine = [department, municipality]
       .filter(Boolean)
       .join(", ") || "Ubicación N/D";
 
@@ -1553,11 +1559,11 @@ const getTimePart = (value?: string | null) => {
         `Ext: ${extensionistName}`,
       ]
         .filter(Boolean)
-        .join(" · ") || "Encuestado / Extensión N/D";
+        .join(" | ") || "Encuestado / Extensión N/D";
 
     return {
       coordLine,
-      dateLine: `${timestampLabel} · ${locationLine}`,
+      dateLine: `${timestampLabel} | ${locationLine}`,
       personLine,
     };
   }, [
@@ -2114,6 +2120,31 @@ const getTimePart = (value?: string | null) => {
   const { mutateAsync: mutateBasicUpdate, isPending: updatingVisit } = useMutation({
     mutationFn: basicUpdateSurvey,
   });
+  const { mutateAsync: mutatePhotoUpdate } = useMutation({
+    mutationFn: updateSurveyPhotos,
+  });
+
+  const handleDeletePhoto = async (photoKey: UploadFileKey) => {
+    if (!selectedVisit || !visitDetail?.id || !accessToken) return;
+    setPhotoDeleteError(null);
+    setPhotoDeleteMessage(null);
+    setIsDeletingPhoto(true);
+    try {
+      await mutatePhotoUpdate({
+        surveyTypeId: selectedVisit,
+        surveyId: visitDetail.id,
+        removeFields: [photoKey as "photo_user" | "photo_interaction" | "photo_panorama" | "phono_extra_1"],
+        token: accessToken,
+        tokenType,
+      });
+      setPhotoDeleteMessage("Foto eliminada correctamente.");
+      await refetchSurveyVisit();
+    } catch (error: unknown) {
+      setPhotoDeleteError(getErrorMessage(error, "No fue posible eliminar la foto."));
+    } finally {
+      setIsDeletingPhoto(false);
+    }
+  };
 
   const handleDecisionSubmit = async (state: "accepted" | "rejected") => {
     if (isDecisionReadOnly) {
@@ -4311,15 +4342,16 @@ const getTimePart = (value?: string | null) => {
                                   placeholder="Ej: Finca La Esperanza"
                                 />
                                 <FieldInput
-                                  label="Coordenadas Geográficas"
-                                  value={[
-                                    editableProperty?.latitude ?? "",
-                                    editableProperty?.longitude ?? "",
-                                  ]
-                                    .filter(Boolean)
-                                    .join(", ")}
-                                  readOnly
-                                  placeholder="Ej: 10.188612074, -74.065231283"
+                                  label="Latitud"
+                                  value={editableProperty?.latitude ?? ""}
+                                  onChange={(v) => updatePropertyField("latitude", v)}
+                                  placeholder="Ej: 10.188612074"
+                                />
+                                <FieldInput
+                                  label="Longitud"
+                                  value={editableProperty?.longitude ?? ""}
+                                  onChange={(v) => updatePropertyField("longitude", v)}
+                                  placeholder="Ej: -74.065231283"
                                 />
                                 <FieldInput
                                   label="ASNM"
@@ -4615,13 +4647,15 @@ const getTimePart = (value?: string | null) => {
                                                 className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
                                                 onClick={() => setSelectedImageUrl(currentUrl)}
                                               >
-                                                Ver grande
+                                                Ver
                                               </button>
                                             ) : null}
                                             <button
                                               type="button"
                                               className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:text-emerald-900"
                                               onClick={() => {
+                                                setPhotoDeleteError(null);
+                                                setPhotoDeleteMessage(null);
                                                 setUploadTarget(item);
                                                 setUploadOptionsOpen(true);
                                               }}
@@ -4629,6 +4663,17 @@ const getTimePart = (value?: string | null) => {
                                               <FiUpload aria-hidden />
                                               Subir
                                             </button>
+                                            {visitUrl ? (
+                                              <button
+                                                type="button"
+                                                disabled={isDeletingPhoto}
+                                                className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                                                onClick={() => handleDeletePhoto(item.key)}
+                                              >
+                                                <FiX aria-hidden />
+                                                Eliminar
+                                              </button>
+                                            ) : null}
                                           </div>
                                         </div>
                                         {updateFiles[item.key] ? (
@@ -4640,6 +4685,12 @@ const getTimePart = (value?: string | null) => {
                                     );
                                   })}
                                 </div>
+                                {photoDeleteMessage ? (
+                                  <p className="mt-2 text-xs font-semibold text-emerald-700">{photoDeleteMessage}</p>
+                                ) : null}
+                                {photoDeleteError ? (
+                                  <p className="mt-2 text-xs font-semibold text-red-600">{photoDeleteError}</p>
+                                ) : null}
                                 <div className="mt-3 grid gap-2 md:grid-cols-3">
                                   <label className="text-sm font-semibold text-emerald-700">
                                     Subir PDF (opcional)
@@ -4985,6 +5036,92 @@ const getTimePart = (value?: string | null) => {
           </div>
         </div>
       ) : null}
+
+      {/* Upload Options Modal */}
+      {uploadOptionsOpen && uploadTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setUploadOptionsOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl ring-1 ring-emerald-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-emerald-900">
+                Subir foto
+              </h3>
+              <button
+                type="button"
+                className="rounded-full p-1 text-emerald-400 hover:bg-emerald-50 hover:text-emerald-700"
+                onClick={() => setUploadOptionsOpen(false)}
+              >
+                <FiX size={18} />
+              </button>
+            </div>
+            <p className="mb-5 text-sm text-emerald-600">
+              {uploadTarget.label} — ¿incluir etiqueta con metadata?
+            </p>
+
+            {/* metadata preview */}
+            <div className="mb-5 rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-[11px] leading-5 text-emerald-700 font-mono">
+              <p>{watermarkText.coordLine}</p>
+              <p>{watermarkText.dateLine}</p>
+              <p>{watermarkText.personLine}</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={isProcessingUpload}
+                className="flex-1 rounded-xl border border-emerald-200 bg-emerald-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-60"
+                onClick={() => uploadWithMetaRef.current?.click()}
+              >
+                Con metadata
+              </button>
+              <button
+                type="button"
+                disabled={isProcessingUpload}
+                className="flex-1 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 disabled:opacity-60"
+                onClick={() => uploadWithoutMetaRef.current?.click()}
+              >
+                Sin metadata
+              </button>
+            </div>
+            {isProcessingUpload ? (
+              <p className="mt-3 text-center text-xs text-emerald-600">
+                Procesando imagen…
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Hidden inputs for photo upload modes */}
+      <input
+        ref={uploadWithMetaRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          if (!uploadTarget) return;
+          setUploadOptionsOpen(false);
+          await handleWatermarkedUpload(uploadTarget.key, e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={uploadWithoutMetaRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          if (!uploadTarget) return;
+          setUploadOptionsOpen(false);
+          handleFileChangeWithPreview(uploadTarget.key, e.target.files);
+          e.target.value = "";
+        }}
+      />
 
       {/* Image Modal */}
       <ImageModal
