@@ -1896,27 +1896,6 @@ const getTimePart = (value?: string | null) => {
     setUpdateFiles((prev) => ({ ...prev, [key]: file || undefined }));
   };
 
-  const handleFileChangeWithPreview = (
-    key: UploadFileKey,
-    files: FileList | null,
-  ) => {
-    handleFileChange(key, files);
-    const file = files?.[0];
-    setPhotoPreviewUrls((prev) => {
-      const next = { ...prev };
-      const previousUrl = prev[key];
-      if (previousUrl) {
-        URL.revokeObjectURL(previousUrl);
-      }
-      if (file) {
-        next[key] = URL.createObjectURL(file);
-      } else {
-        delete next[key];
-      }
-      return next;
-    });
-  };
-
   const generateWatermarkedFile = useCallback(
     async (file: File, mode: "normal" | "compact" = "normal") => {
       const imgUrl = URL.createObjectURL(file);
@@ -2023,52 +2002,6 @@ const getTimePart = (value?: string | null) => {
     });
   }, []);
 
-  const handleWatermarkedUpload = async (
-    key: UploadFileKey,
-    files: FileList | null,
-    mode: "normal" | "compact" = "normal",
-  ) => {
-    clearUpdateFeedback();
-    if (!files?.[0]) {
-      setUpdateFiles((prev) => ({
-        ...prev,
-        [key]: undefined,
-      }));
-      setPhotoPreviewUrls((prev) => {
-        const next = { ...prev };
-        if (next[key]) {
-          URL.revokeObjectURL(next[key] as string);
-          delete next[key];
-        }
-        return next;
-      });
-      return;
-    }
-
-    const baseFile = files[0];
-    try {
-      setIsProcessingUpload(true);
-      const markedFile = await generateWatermarkedFile(baseFile, mode);
-      setUpdateFiles((prev) => ({
-        ...prev,
-        [key]: markedFile,
-      }));
-      setPhotoPreviewUrls((prev) => {
-        const next = { ...prev };
-        if (next[key]) {
-          URL.revokeObjectURL(next[key] as string);
-          delete next[key];
-        }
-        next[key] = URL.createObjectURL(markedFile);
-        return next;
-      });
-    } catch (error) {
-      setUpdateError("No se pudo generar la imagen con marca. Intenta de nuevo.");
-    } finally {
-      setIsProcessingUpload(false);
-    }
-  };
-
   const handleBlackBarUpload = async (key: UploadFileKey, files: FileList | null) => {
     clearUpdateFeedback();
     if (!files?.[0]) {
@@ -2131,6 +2064,67 @@ const getTimePart = (value?: string | null) => {
   const { mutateAsync: mutatePhotoUpdate } = useMutation({
     mutationFn: updateSurveyPhotos,
   });
+
+  const submitPhotoUpload = async (
+    key: UploadFileKey,
+    files: FileList | null,
+    mode: "normal" | "compact" = "normal",
+  ) => {
+    clearUpdateFeedback();
+    if (!files?.[0]) return;
+    if (!selectedVisit || !visitDetail?.id) {
+      setUpdateError("Selecciona una visita antes de subir fotos.");
+      return;
+    }
+    if (!accessToken) {
+      setUpdateError("No hay sesión válida para actualizar.");
+      return;
+    }
+
+    try {
+      setIsProcessingUpload(true);
+      const finalFile =
+        mode === "normal"
+          ? await generateWatermarkedFile(files[0], mode)
+          : files[0];
+      setPhotoPreviewUrls((prev) => {
+        const next = { ...prev };
+        const previousUrl = next[key];
+        if (previousUrl) {
+          URL.revokeObjectURL(previousUrl);
+        }
+        next[key] = URL.createObjectURL(finalFile);
+        return next;
+      });
+      await mutatePhotoUpdate({
+        surveyTypeId: selectedVisit,
+        surveyId: visitDetail.id,
+        files: { [key]: finalFile } as Partial<Record<UploadFileKey, File>>,
+        token: accessToken,
+        tokenType,
+      });
+      setUpdateFiles((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setPhotoPreviewUrls((prev) => {
+        const next = { ...prev };
+        const previousUrl = next[key];
+        if (previousUrl) {
+          URL.revokeObjectURL(previousUrl);
+        }
+        delete next[key];
+        return next;
+      });
+      setUpdateMessage("Foto actualizada correctamente.");
+      await refetchSurveyVisit();
+    } catch (error: unknown) {
+      setUpdateError(getErrorMessage(error, "No fue posible actualizar la foto."));
+    } finally {
+      setIsProcessingUpload(false);
+    }
+  };
 
   const handleDeletePhoto = async (photoKey: UploadFileKey) => {
     if (!selectedVisit || !visitDetail?.id || !accessToken) return;
@@ -5099,7 +5093,7 @@ const getTimePart = (value?: string | null) => {
               </button>
             </div>
             <p className="mb-5 text-sm text-emerald-600">
-              {uploadTarget.label} — ¿incluir etiqueta con metadata?
+              {uploadTarget.label} — se sube al elegir el archivo. ¿Incluir etiqueta con metadata?
             </p>
 
             {/* metadata preview */}
@@ -5145,7 +5139,7 @@ const getTimePart = (value?: string | null) => {
         onChange={async (e) => {
           if (!uploadTarget) return;
           setUploadOptionsOpen(false);
-          await handleWatermarkedUpload(uploadTarget.key, e.target.files);
+          await submitPhotoUpload(uploadTarget.key, e.target.files, "normal");
           e.target.value = "";
         }}
       />
@@ -5154,10 +5148,10 @@ const getTimePart = (value?: string | null) => {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={(e) => {
+        onChange={async (e) => {
           if (!uploadTarget) return;
           setUploadOptionsOpen(false);
-          handleFileChangeWithPreview(uploadTarget.key, e.target.files);
+          await submitPhotoUpload(uploadTarget.key, e.target.files, "compact");
           e.target.value = "";
         }}
       />

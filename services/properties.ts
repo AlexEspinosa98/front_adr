@@ -7,6 +7,18 @@ const authHeaders = (token?: string, tokenType: string = "Token") =>
       }
     : undefined;
 
+const multipartAuthHeaders = (token?: string, tokenType: string = "Token") =>
+  token
+    ? {
+        Authorization: `${tokenType} ${token}`,
+        Accept: "application/json",
+        "Content-Type": "multipart/form-data",
+      }
+    : {
+        Accept: "application/json",
+        "Content-Type": "multipart/form-data",
+      };
+
 type RawExtensionistProperty = {
   id?: number;
   property_id?: number;
@@ -732,7 +744,7 @@ export const basicUpdateSurvey = async ({
       `/admin/surveys/${surveyTypeId}/${surveyId}/basic-update`,
       formData,
       {
-        headers: authHeaders(token, tokenType),
+        headers: multipartAuthHeaders(token, tokenType),
       },
     );
     return data;
@@ -836,7 +848,7 @@ export const updateSurveyPhotos = async ({
   const { data } = await httpClient.patch<UpdateSurveyPhotosResponse>(
     `/admin/surveys/${surveyTypeId}/${surveyId}/photos/`,
     formData,
-    { headers: authHeaders(token, tokenType) },
+    { headers: multipartAuthHeaders(token, tokenType) },
   );
   return data;
 };
