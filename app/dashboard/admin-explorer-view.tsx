@@ -340,6 +340,14 @@ type UploadFileKey =
 type UpdateFilesState = Partial<Record<UploadFileKey, File>>;
 type UploadPreviewState = Partial<Record<UploadFileKey, string>>;
 
+const PHOTO_UPLOAD_KEYS: UploadFileKey[] = [
+  "photo_user",
+  "photo_interaction",
+  "photo_panorama",
+  "phono_extra_1",
+  "file_pdf",
+];
+
 type ApiErrorPayload = { message?: string };
 type ApiErrorShape = { response?: { data?: ApiErrorPayload }; message?: string };
 
@@ -2197,6 +2205,17 @@ const getTimePart = (value?: string | null) => {
     const producerPayload = buildProducerPayload();
     const propertyPayload = buildPropertyPayload();
     const hasFiles = Object.values(updateFiles).some(Boolean);
+    const hasTextPayload = Boolean(surveyPayload || producerPayload || propertyPayload);
+    const photoFiles = Object.entries(updateFiles).reduce<UpdateFilesState>(
+      (acc, [key, value]) => {
+        if (value && PHOTO_UPLOAD_KEYS.includes(key as UploadFileKey)) {
+          acc[key as UploadFileKey] = value;
+        }
+        return acc;
+      },
+      {},
+    );
+    const hasPhotoOnlyFiles = Object.values(photoFiles).some(Boolean);
     if (!surveyPayload && !producerPayload && !propertyPayload && !hasFiles) {
       setUpdateError("No hay cambios para enviar.");
       return;
@@ -2204,6 +2223,26 @@ const getTimePart = (value?: string | null) => {
     setUpdateError(null);
     setUpdateMessage(null);
     try {
+      if (hasPhotoOnlyFiles && !hasTextPayload) {
+        const response = await mutatePhotoUpdate({
+          surveyTypeId: selectedVisit,
+          surveyId: visitDetail.id,
+          files: photoFiles,
+          token: accessToken,
+          tokenType,
+        });
+        if (response?.data) {
+          setEditableVisit((prev) =>
+            prev ? normalizeEditableVisit({ ...prev, ...response.data }) : prev,
+          );
+        }
+        setUpdateFiles({});
+        setPhotoPreviewUrls({});
+        setUpdateMessage("Fotos actualizadas correctamente.");
+        await refetchSurveyVisit();
+        return;
+      }
+
       const response = await mutateBasicUpdate({
         surveyTypeId: selectedVisit,
         surveyId: visitDetail.id,

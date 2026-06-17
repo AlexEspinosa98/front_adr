@@ -787,7 +787,12 @@ export const updateSurveyState = async ({
   return data;
 };
 
-type PhotoField = "photo_user" | "photo_interaction" | "photo_panorama" | "phono_extra_1";
+type PhotoField =
+  | "photo_user"
+  | "photo_interaction"
+  | "photo_panorama"
+  | "phono_extra_1"
+  | "file_pdf";
 
 export interface UpdateSurveyPhotosInput {
   surveyTypeId: number;
@@ -806,6 +811,7 @@ export interface UpdateSurveyPhotosResponse {
     photo_interaction?: string | null;
     photo_panorama?: string | null;
     phono_extra_1?: string | null;
+    file_pdf?: string | null;
     updated_at?: string;
   };
 }
@@ -828,7 +834,7 @@ export const updateSurveyPhotos = async ({
     formData.append("remove_fields", JSON.stringify(removeFields));
   }
   const { data } = await httpClient.patch<UpdateSurveyPhotosResponse>(
-    `/admin/surveys/${surveyTypeId}/${surveyId}/photos`,
+    `/admin/surveys/${surveyTypeId}/${surveyId}/photos/`,
     formData,
     { headers: authHeaders(token, tokenType) },
   );
